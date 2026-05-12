@@ -15,6 +15,7 @@ constexpr int kSampleRate = 22050;
 constexpr int kAudioChannels = 1;
 
 SDL_AudioDeviceID gDevice = 0;
+float gMasterVolume = 0.8F;
 
 struct SoundBuffer {
     std::vector<Sint16> samples;
@@ -126,6 +127,32 @@ void generateSound(SoundId id) {
             }
             break;
         }
+        case SoundId::DoorOpen: {
+            len = kSampleRate * 200 / 1000;
+            buf.samples.resize(len);
+            for (int i = 0; i < len; ++i) {
+                float t = static_cast<float>(i) / static_cast<float>(len);
+                float env = std::max(0.0F, 1.0F - t * 1.5F);
+                float creak = std::sin(t * 200.0F * 6.28F) * 0.3F + std::sin(t * 350.0F * 6.28F) * 0.2F;
+                float noise = static_cast<float>((i * 1103515245 + 12345) % 32768) / 32768.0F - 0.5F;
+                buf.samples[i] = static_cast<Sint16>((creak + noise * 0.15F) * env * 6000.0F);
+            }
+            break;
+        }
+        case SoundId::LevelClear: {
+            len = kSampleRate * 500 / 1000;
+            buf.samples.resize(len);
+            for (int i = 0; i < len; ++i) {
+                float t = static_cast<float>(i) / static_cast<float>(len);
+                float freq = 523.0F;
+                if (t > 0.2F) freq = 659.0F;
+                if (t > 0.4F) freq = 784.0F;
+                if (t > 0.6F) freq = 1047.0F;
+                float env = std::max(0.0F, 1.0F - t * 0.8F);
+                buf.samples[i] = static_cast<Sint16>(std::sin(t * freq * 6.28F) * env * 5000.0F);
+            }
+            break;
+        }
         default: break;
     }
 }
@@ -160,10 +187,20 @@ void play(SoundId id) {
     if (gDevice == 0) return;
     auto& buf = gSounds[static_cast<int>(id)];
     if (buf.samples.empty()) return;
-    if (SDL_QueueAudio(gDevice, buf.samples.data(),
-                       static_cast<Uint32>(buf.samples.size() * sizeof(Sint16))) != 0) {
+    if (gMasterVolume < 0.01F) return;
+
+    std::vector<Sint16> scaled(buf.samples.size());
+    for (size_t i = 0; i < buf.samples.size(); ++i)
+        scaled[i] = static_cast<Sint16>(buf.samples[i] * gMasterVolume);
+
+    if (SDL_QueueAudio(gDevice, scaled.data(),
+                       static_cast<Uint32>(scaled.size() * sizeof(Sint16))) != 0) {
         std::fprintf(stderr, "SDL_QueueAudio failed: %s\n", SDL_GetError());
     }
+}
+
+void setMasterVolume(float vol) {
+    gMasterVolume = std::max(0.0F, std::min(1.0F, vol));
 }
 
 }  // namespace AudioSystem

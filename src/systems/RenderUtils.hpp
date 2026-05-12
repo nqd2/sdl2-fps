@@ -30,6 +30,14 @@ inline uint32_t lerpColor(uint32_t a, uint32_t b, float t) {
         static_cast<uint8_t>(((a >> 16) & 0xFF) * it + ((b >> 16) & 0xFF) * t));
 }
 
+inline uint32_t blendColor(uint32_t dst, uint32_t src, float alpha) {
+    float ia = 1.0F - alpha;
+    return packRGBA(
+        static_cast<uint8_t>((src & 0xFF) * alpha + (dst & 0xFF) * ia),
+        static_cast<uint8_t>(((src >> 8) & 0xFF) * alpha + ((dst >> 8) & 0xFF) * ia),
+        static_cast<uint8_t>(((src >> 16) & 0xFF) * alpha + ((dst >> 16) & 0xFF) * ia));
+}
+
 inline uint32_t enemyColor(EnemyType type) {
     switch (type) {
         case EnemyType::Fast:     return packRGBA(255, 195, 66);
@@ -53,5 +61,6 @@ const Texture& wallTex1();
 const Texture& wallTex2();
 const Texture& floorTex();
 const Texture& ceilTex();
+const Texture& doorTex();
 
 }  // namespace RenderUtils

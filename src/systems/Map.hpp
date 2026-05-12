@@ -4,32 +4,14 @@
 
 namespace Map {
 
-constexpr int kWidth = 16;
-constexpr int kHeight = 16;
 constexpr float kPlayerRadius = 0.22F;
 
-constexpr const char* kRows[kHeight] = {
-    "################",
-    "#......#.......#",
-    "#......#.......#",
-    "#..............#",
-    "#..##..........#",
-    "#..............#",
-    "#......####....#",
-    "#..............#",
-    "#..............#",
-    "#....##........#",
-    "#..............#",
-    "#...........#..#",
-    "#..............#",
-    "#...#..........#",
-    "#..............#",
-    "################",
-};
-
-bool isWall(float x, float y);
-bool canMoveTo(const Vec2& p);
-Vec2 randomOpenCell();
-bool hasLineOfSight(Vec2 from, Vec2 to);
+char cellAt(const World& world, int x, int y);
+bool isWall(const World& world, float x, float y);
+bool isBlocker(const World& world, float x, float y);
+bool canMoveTo(const World& world, const Vec2& p);
+Vec2 randomOpenCell(const World& world);
+bool hasLineOfSight(const World& world, Vec2 from, Vec2 to);
+void setCell(World& world, int x, int y, char c);
 
 }  // namespace Map

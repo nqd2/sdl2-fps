@@ -10,6 +10,7 @@ Texture gWallTex;
 Texture gWallTex2;
 Texture gFloorTex;
 Texture gCeilTex;
+Texture gDoorTex;
 bool gGenerated = false;
 }
 
@@ -46,11 +47,25 @@ void generateTextures() {
         uint8_t base = static_cast<uint8_t>(std::max(18, std::min(50, 32 + noise)));
         gCeilTex.pixels[y * S + x] = packRGBA(static_cast<uint8_t>(base * 0.7F), static_cast<uint8_t>(base * 0.75F), base);
     }
+    for (int y = 0; y < S; ++y) for (int x = 0; x < S; ++x) {
+        bool borderH = (y < 3 || y >= S - 3);
+        bool borderV = (x < 3 || x >= S - 3);
+        bool rivet = ((x == 6 || x == S - 7) && (y == 6 || y == S - 7));
+        bool midLine = (std::abs(x - S / 2) < 2);
+        uint8_t base = 80;
+        if (borderH || borderV) base = 55;
+        else if (rivet) base = 120;
+        else if (midLine) base = 60;
+        int noise = ((x * 13 + y * 7) % 9) - 4;
+        base = static_cast<uint8_t>(std::max(30, std::min(140, static_cast<int>(base) + noise)));
+        gDoorTex.pixels[y * S + x] = packRGBA(static_cast<uint8_t>(base * 0.5F), static_cast<uint8_t>(base * 0.6F), static_cast<uint8_t>(base * 1.0F));
+    }
 }
 
 const Texture& wallTex1() { return gWallTex; }
 const Texture& wallTex2() { return gWallTex2; }
 const Texture& floorTex() { return gFloorTex; }
 const Texture& ceilTex()  { return gCeilTex; }
+const Texture& doorTex()  { return gDoorTex; }
 
 }  // namespace RenderUtils

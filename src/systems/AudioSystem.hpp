@@ -7,5 +7,6 @@ namespace AudioSystem {
 void init();
 void shutdown();
 void play(SoundId id);
+void setMasterVolume(float vol);
 
 }  // namespace AudioSystem
