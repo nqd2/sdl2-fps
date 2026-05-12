@@ -239,6 +239,15 @@ void update(World& world, StateMachine& states, float dt) {
     world.enemies.erase(std::remove_if(world.enemies.begin(), world.enemies.end(),
         [](const Enemy& e) { return e.hp <= 0; }), world.enemies.end());
 
+    if (!world.waveCleared && world.killsInWave >= world.killsToClearWave && world.enemies.empty()) {
+        world.waveCleared = true;
+        world.pendingUpgrades = pickUpgradeChoices(world.wave);
+        AudioSystem::play(SoundId::WaveClear);
+        InputSystem::setMouseCapture(world, false);
+        states.clearAndSet(GameStateId::UpgradeSelection);
+        return;
+    }
+
     for (auto& p : world.pickups) {
         p.lifetime -= dt;
         p.bobPhase += dt * 3.0F;

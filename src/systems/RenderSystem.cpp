@@ -800,18 +800,70 @@ void renderUpgradeOverlay(const Canvas& c, const World& world) {
     }
 }
 
+void renderTitleBar(const Canvas& c, const World& world, SDL_Window* window) {
+    const int w = c.w;
+    const int h = c.h;
+    const int cy = h / 2;
+
+    c.fill(0, h - 1, w, 1, packRGBA(40, 50, 80));
+
+    c.txtL("IRON MAZE", 12, cy - 5, 2, kGold);
+
+    int btnW = 46;
+    int closeX = w - btnW;
+    int maxX   = closeX - btnW;
+    int minX   = maxX - btnW;
+    int muteX  = minX - btnW;
+
+    uint32_t muteBg = world.settings.muted ? packRGBA(50, 30, 30) : packRGBA(24, 28, 42);
+    c.fill(muteX, 0, btnW, h - 1, muteBg);
+    const char* muteLabel = world.settings.muted ? "MUTE" : "SND";
+    uint32_t muteCol = world.settings.muted ? kRed : kGreen;
+    c.txt(muteLabel, muteX + btnW / 2, cy, 2, muteCol);
+
+    c.fill(minX, 0, btnW, h - 1, packRGBA(24, 28, 42));
+    c.fill(minX + 16, cy, btnW - 32, 2, kDimWhite);
+
+    Uint32 winFlags = SDL_GetWindowFlags(window);
+    bool maximized = (winFlags & SDL_WINDOW_MAXIMIZED) != 0;
+    c.fill(maxX, 0, btnW, h - 1, packRGBA(24, 28, 42));
+    if (maximized) {
+        int bx = maxX + 14, by = 7;
+        c.fill(bx + 4, by, 12, 1, kDimWhite);
+        c.fill(bx + 4, by, 1, 12, kDimWhite);
+        c.fill(bx + 15, by, 1, 9, kDimWhite);
+        c.fill(bx + 4, by + 11, 12, 1, kDimWhite);
+
+        c.fill(bx, by + 4, 12, 1, kDimWhite);
+        c.fill(bx, by + 4, 1, 12, kDimWhite);
+        c.fill(bx + 11, by + 4, 1, 12, kDimWhite);
+        c.fill(bx, by + 15, 12, 1, kDimWhite);
+    } else {
+        int bx = maxX + 14, by = 8;
+        c.fill(bx, by, 16, 1, kDimWhite);
+        c.fill(bx, by, 1, 14, kDimWhite);
+        c.fill(bx + 15, by, 1, 14, kDimWhite);
+        c.fill(bx, by + 13, 16, 1, kDimWhite);
+    }
+
+    c.fill(closeX, 0, btnW, h - 1, packRGBA(160, 40, 40));
+    c.txt("X", closeX + btnW / 2, cy, 2, kWhite);
+}
+
 }  // namespace
 
-void render(const World& world, GameStateId state, SDL_Renderer* renderer) {
+void render(const World& world, GameStateId state, SDL_Renderer* renderer, SDL_Window* window) {
     RenderUtils::generateTextures();
 
-    // Internal render resolution: window / kRenderScale for 3D scenes,
-    // full resolution for menus. GPU upscales via SDL_RenderCopy.
+    // Internal render resolution: 3D scenes render below native resolution,
+    // menu screens render at a fixed logical size so pixel-font UI scales up on large windows.
     constexpr int kScale = GameConstants::kRenderScale;
+    constexpr int kMenuRenderW = GameConstants::kResolutions[1][0];
+    constexpr int kMenuRenderH = GameConstants::kResolutions[1][1];
     bool is3D = (state == GameStateId::Playing || state == GameStateId::Paused ||
                  state == GameStateId::UpgradeSelection);
-    const int rw = is3D ? (world.width / kScale) : world.width;
-    const int rh = is3D ? (world.height / kScale) : world.height;
+    const int rw = is3D ? std::max(1, world.width / kScale) : kMenuRenderW;
+    const int rh = is3D ? std::max(1, world.height / kScale) : kMenuRenderH;
 
     if (gFramebuffer == nullptr || gFbWidth != rw || gFbHeight != rh) {
         if (gFramebuffer != nullptr) SDL_DestroyTexture(gFramebuffer);
@@ -872,7 +924,35 @@ void render(const World& world, GameStateId state, SDL_Renderer* renderer) {
     }
 
     SDL_UnlockTexture(gFramebuffer);
-    SDL_RenderCopy(renderer, gFramebuffer, nullptr, nullptr);
+
+    // Render scene below the title bar
+    SDL_Rect dstRect {0, kTitleBarHeight, world.width, world.height - kTitleBarHeight};
+    SDL_RenderCopy(renderer, gFramebuffer, nullptr, &dstRect);
+
+    // Render title bar at native resolution using a separate texture
+    {
+        static SDL_Texture* tbTex = nullptr;
+        static int tbTexW = 0;
+        if (tbTex == nullptr || tbTexW != world.width) {
+            if (tbTex != nullptr) SDL_DestroyTexture(tbTex);
+            SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
+            tbTex = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR8888,
+                                      SDL_TEXTUREACCESS_STREAMING, world.width, kTitleBarHeight);
+            tbTexW = world.width;
+        }
+        uint32_t* tbPx = nullptr;
+        int tbPitch = 0;
+        if (SDL_LockTexture(tbTex, nullptr, reinterpret_cast<void**>(&tbPx), &tbPitch) == 0) {
+            int tbPp = tbPitch / static_cast<int>(sizeof(uint32_t));
+            for (int i = 0; i < tbPp * kTitleBarHeight; ++i) tbPx[i] = packRGBA(16, 18, 28);
+            Canvas tbCanvas {tbPx, tbPp, world.width, kTitleBarHeight};
+            renderTitleBar(tbCanvas, world, window);
+            SDL_UnlockTexture(tbTex);
+            SDL_Rect tbDst {0, 0, world.width, kTitleBarHeight};
+            SDL_RenderCopy(renderer, tbTex, nullptr, &tbDst);
+        }
+    }
+
     SDL_RenderPresent(renderer);
 }
 

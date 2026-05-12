@@ -80,7 +80,7 @@ Enemy makeEnemyForWave(EnemyType type, int wave, const Vec2& spawn, const Diffic
 std::array<UpgradeOption, 6> allUpgradeOptions() {
     return {UpgradeOption {UpgradeId::HighCaliber,    "High Caliber",    "+25% damage",                       1.25F, 1.0F, 0.0F, 0},
             UpgradeOption {UpgradeId::HairTrigger,    "Hair Trigger",    "+20% fire rate",                    1.0F, 1.2F, 0.0F, 0},
-            UpgradeOption {UpgradeId::KineticBoots,   "Kinetic Boots",   "+35 move speed",                    1.0F, 1.0F, 35.0F, 0},
+            UpgradeOption {UpgradeId::KineticBoots,   "Kinetic Boots",   "+0.35 move speed",                  1.0F, 1.0F, 0.35F, 0},
             UpgradeOption {UpgradeId::ReinforcedSuit, "Reinforced Suit", "+4 max HP and heal 4",              1.0F, 1.0F, 0.0F, 4},
             UpgradeOption {UpgradeId::FullArsenal,    "Full Arsenal",    "Unlock all weapons",                1.0F, 1.0F, 0.0F, 0},
             UpgradeOption {UpgradeId::Overdrive,      "Overdrive",       "+15% damage and +10% fire rate",    1.15F, 1.1F, 0.0F, 0}};

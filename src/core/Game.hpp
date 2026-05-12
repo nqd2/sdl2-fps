@@ -15,6 +15,8 @@ public:
     void run();
     void shutdown();
 
+    SDL_Window* window() const { return window_; }
+
 private:
     World world_ {};
     StateMachine states_ {};

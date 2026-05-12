@@ -7,7 +7,7 @@
 
 namespace InputSystem {
 
-void handleInput(World& world, StateMachine& states, const SDL_Event& event);
+void handleInput(World& world, StateMachine& states, const SDL_Event& event, SDL_Window* window);
 void setMouseCapture(World& world, bool capture);
 
 }  // namespace InputSystem

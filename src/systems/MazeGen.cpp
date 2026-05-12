@@ -85,6 +85,32 @@ MazeResult generate(int level, unsigned int seed) {
 
     grid[idx(farX, farY)] = 'E';
 
+    auto exitReachable = [&]() {
+        std::vector<bool> visited(mazeW * mazeH, false);
+        std::queue<std::pair<int, int>> q;
+        visited[idx(1, 1)] = true;
+        q.push({1, 1});
+
+        while (!q.empty()) {
+            auto [x, y] = q.front();
+            q.pop();
+            if (x == farX && y == farY) return true;
+
+            for (int d = 0; d < 4; ++d) {
+                int nx = x + bfsDx[d];
+                int ny = y + bfsDy[d];
+                if (nx < 0 || nx >= mazeW || ny < 0 || ny >= mazeH) continue;
+                if (visited[idx(nx, ny)]) continue;
+                char c = grid[idx(nx, ny)];
+                if (c == '.' || c == 'E') {
+                    visited[idx(nx, ny)] = true;
+                    q.push({nx, ny});
+                }
+            }
+        }
+        return false;
+    };
+
     // Place locked doors at random corridor cells
     int numDoors = level / 2;
     if (numDoors > 5) numDoors = 5;
@@ -113,9 +139,16 @@ MazeResult generate(int level, unsigned int seed) {
         }
 
         std::shuffle(candidates.begin(), candidates.end(), rng);
-        int placed = std::min(numDoors, static_cast<int>(candidates.size()));
-        for (int i = 0; i < placed; ++i) {
-            grid[idx(candidates[i].first, candidates[i].second)] = 'D';
+        int placed = 0;
+        for (const auto& candidate : candidates) {
+            if (placed >= numDoors) break;
+            int doorIndex = idx(candidate.first, candidate.second);
+            grid[doorIndex] = 'D';
+            if (exitReachable()) {
+                ++placed;
+            } else {
+                grid[doorIndex] = '.';
+            }
         }
     }
 

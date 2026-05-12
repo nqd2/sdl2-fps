@@ -176,7 +176,9 @@ struct LeaderboardEntry {
 struct Settings {
     float masterVolume {0.8F};
     float mouseSensitivity {0.003F};
-    int resolutionIndex {1};
+    int resolutionIndex {2};
+    bool muted {false};
+    float volumeBeforeMute {0.8F};
 };
 
 struct Player {
@@ -200,6 +202,7 @@ struct Player {
     float speedBoostTimer {0.0F};
     float shieldTimer {0.0F};
     float baseSpeed {3.5F};
+    float upgradeSpeedBonus {0.0F};
     int keys {0};
     int xp {0};
     int playerLevel {0};
@@ -212,9 +215,19 @@ struct Player {
 constexpr int kMaxLeaderboard = 10;
 constexpr int kMaxDecals = 50;
 
+constexpr int kTitleBarHeight = 32;
+
+enum class TitleBarButton {
+    None,
+    Mute,
+    Minimize,
+    Maximize,
+    Close,
+};
+
 struct World {
-    int width {1280};
-    int height {720};
+    int width {1920};
+    int height {1080};
     int score {0};
     int level {1};
     int wave {1};

@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdint>
 #include <vector>
 
 namespace AudioSystem {
@@ -23,6 +24,11 @@ struct SoundBuffer {
 
 SoundBuffer gSounds[static_cast<int>(SoundId::Count)];
 
+float deterministicNoise(int sample) {
+    uint32_t value = static_cast<uint32_t>(sample) * 1103515245U + 12345U;
+    return static_cast<float>(value & 0x7FFFU) / 32768.0F - 0.5F;
+}
+
 void generateSound(SoundId id) {
     auto& buf = gSounds[static_cast<int>(id)];
     int len = 0;
@@ -34,7 +40,7 @@ void generateSound(SoundId id) {
                 float t = static_cast<float>(i) / static_cast<float>(len);
                 float freq = 600.0F - 400.0F * t;
                 float env = (1.0F - t) * (1.0F - t);
-                float noise = static_cast<float>((i * 1103515245 + 12345) % 32768) / 32768.0F - 0.5F;
+                float noise = deterministicNoise(i);
                 buf.samples[i] = static_cast<Sint16>((std::sin(t * freq * 6.28F) * 0.4F + noise * 0.6F) * env * 8000.0F);
             }
             break;
@@ -45,7 +51,7 @@ void generateSound(SoundId id) {
             for (int i = 0; i < len; ++i) {
                 float t = static_cast<float>(i) / static_cast<float>(len);
                 float env = (1.0F - t);
-                float noise = static_cast<float>((i * 1103515245 + 12345) % 32768) / 32768.0F - 0.5F;
+                float noise = deterministicNoise(i);
                 buf.samples[i] = static_cast<Sint16>(noise * env * 12000.0F);
             }
             break;
@@ -121,7 +127,7 @@ void generateSound(SoundId id) {
             for (int i = 0; i < len; ++i) {
                 float t = static_cast<float>(i) / static_cast<float>(len);
                 float env = (1.0F - t) * (1.0F - t);
-                float noise = static_cast<float>((i * 1103515245 + 12345) % 32768) / 32768.0F - 0.5F;
+                float noise = deterministicNoise(i);
                 float bass = std::sin(t * 60.0F * 6.28F) * 0.5F;
                 buf.samples[i] = static_cast<Sint16>((noise * 0.6F + bass) * env * 14000.0F);
             }
@@ -134,7 +140,7 @@ void generateSound(SoundId id) {
                 float t = static_cast<float>(i) / static_cast<float>(len);
                 float env = std::max(0.0F, 1.0F - t * 1.5F);
                 float creak = std::sin(t * 200.0F * 6.28F) * 0.3F + std::sin(t * 350.0F * 6.28F) * 0.2F;
-                float noise = static_cast<float>((i * 1103515245 + 12345) % 32768) / 32768.0F - 0.5F;
+                float noise = deterministicNoise(i);
                 buf.samples[i] = static_cast<Sint16>((creak + noise * 0.15F) * env * 6000.0F);
             }
             break;

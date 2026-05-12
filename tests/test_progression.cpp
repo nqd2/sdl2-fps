@@ -189,6 +189,7 @@ void testUpgradePool() {
     CHECK(pool[1].fireRateMultiplier > 1.0F);
     CHECK(pool[2].id == UpgradeId::KineticBoots);
     CHECK(pool[2].moveSpeedBonus > 0.0F);
+    CHECK(pool[2].moveSpeedBonus < 1.0F);
     CHECK(pool[3].id == UpgradeId::ReinforcedSuit);
     CHECK(pool[3].hpBonus > 0);
 }
@@ -378,7 +379,7 @@ void testMazeGenDoors() {
 
 void testMazeGenPathExists() {
     auto maze = MazeGen::generate(3, 77);
-    // BFS from start to verify exit is reachable (ignoring doors)
+    // BFS from start to verify exit is reachable without opening locked doors.
     std::vector<bool> visited(maze.width * maze.height, false);
     std::vector<std::pair<int, int>> queue;
     queue.push_back({maze.startX, maze.startY});
@@ -393,7 +394,7 @@ void testMazeGenPathExists() {
             if (nx < 0 || nx >= maze.width || ny < 0 || ny >= maze.height) continue;
             if (visited[ny * maze.width + nx]) continue;
             char c = maze.grid[ny * maze.width + nx];
-            if (c == '.' || c == 'E' || c == 'D') {
+            if (c == '.' || c == 'E') {
                 visited[ny * maze.width + nx] = true;
                 queue.push_back({nx, ny});
             }
@@ -471,8 +472,9 @@ void testParticleEviction() {
 
 void testWorldDefaults() {
     World w {};
-    CHECK(w.width == 1280);
-    CHECK(w.height == 720);
+    CHECK(w.width == 1920);
+    CHECK(w.height == 1080);
+    CHECK(w.settings.resolutionIndex == 2);
     CHECK(w.score == 0);
     CHECK(w.wave == 1);
     CHECK(w.level == 1);

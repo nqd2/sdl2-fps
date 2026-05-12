@@ -26,7 +26,7 @@ void applyStatEffects(World& world) {
     } else {
         p.maxHp = newMaxHp;
     }
-    p.baseSpeed = GameConstants::kPlayerBaseSpeed + p.stats[static_cast<int>(StatId::MoveSpeed)] * GameConstants::kStatSpeedPerPoint;
+    p.baseSpeed = GameConstants::kPlayerBaseSpeed + p.upgradeSpeedBonus;
 }
 
 void awardXp(World& world, int amount) {
@@ -147,8 +147,8 @@ void firePlayerWeapon(World& world) {
 void applyUpgrade(World& world, const UpgradeOption& up) {
     world.player.damageMultiplier *= up.damageMultiplier;
     world.player.fireRateMultiplier *= up.fireRateMultiplier;
-    world.player.speed += up.moveSpeedBonus;
-    world.player.baseSpeed += up.moveSpeedBonus;
+    world.player.upgradeSpeedBonus += up.moveSpeedBonus;
+    world.player.baseSpeed = GameConstants::kPlayerBaseSpeed + world.player.upgradeSpeedBonus;
     if (up.hpBonus > 0) {
         world.player.maxHp += up.hpBonus;
         world.player.hp = std::min(world.player.maxHp, world.player.hp + up.hpBonus);

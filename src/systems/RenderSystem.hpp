@@ -7,6 +7,6 @@
 
 namespace RenderSystem {
 
-void render(const World& world, GameStateId state, SDL_Renderer* renderer);
+void render(const World& world, GameStateId state, SDL_Renderer* renderer, SDL_Window* window);
 
 }  // namespace RenderSystem

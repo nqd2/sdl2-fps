@@ -20,8 +20,65 @@ void setMouseCapture(World& world, bool capture) {
     }
 }
 
-void handleInput(World& world, StateMachine& states, const SDL_Event& event) {
+namespace {
+
+TitleBarButton hitTestTitleButton(const World& world, int mx, int my) {
+    if (my >= kTitleBarHeight) return TitleBarButton::None;
+    int btnW = 46;
+    int closeX = world.width - btnW;
+    int maxX   = closeX - btnW;
+    int minX   = maxX - btnW;
+    int muteX  = minX - btnW;
+    if (mx >= closeX)            return TitleBarButton::Close;
+    if (mx >= maxX)              return TitleBarButton::Maximize;
+    if (mx >= minX)              return TitleBarButton::Minimize;
+    if (mx >= muteX)             return TitleBarButton::Mute;
+    return TitleBarButton::None;
+}
+
+}  // namespace
+
+void handleInput(World& world, StateMachine& states, const SDL_Event& event, SDL_Window* window) {
     if (event.type == SDL_QUIT) { world.quitRequested = true; return; }
+
+    if (event.type == SDL_WINDOWEVENT) {
+        if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
+            world.width = event.window.data1;
+            world.height = event.window.data2;
+        }
+    }
+
+    if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT) {
+        TitleBarButton btn = hitTestTitleButton(world, event.button.x, event.button.y);
+        switch (btn) {
+            case TitleBarButton::Close:
+                world.quitRequested = true;
+                return;
+            case TitleBarButton::Minimize:
+                SDL_MinimizeWindow(window);
+                return;
+            case TitleBarButton::Maximize: {
+                Uint32 flags = SDL_GetWindowFlags(window);
+                if (flags & SDL_WINDOW_MAXIMIZED)
+                    SDL_RestoreWindow(window);
+                else
+                    SDL_MaximizeWindow(window);
+                return;
+            }
+            case TitleBarButton::Mute:
+                if (world.settings.muted) {
+                    world.settings.muted = false;
+                    world.settings.masterVolume = world.settings.volumeBeforeMute;
+                } else {
+                    world.settings.volumeBeforeMute = world.settings.masterVolume;
+                    world.settings.muted = true;
+                }
+                return;
+            case TitleBarButton::None:
+                break;
+        }
+    }
+
     const GameStateId state = states.current();
 
     if (event.type == SDL_MOUSEMOTION && state == GameStateId::Playing && world.mouseCaptured) {
@@ -59,7 +116,15 @@ void handleInput(World& world, StateMachine& states, const SDL_Event& event) {
             if (k == SDLK_RETURN) { states.clearAndSet(GameStateId::DifficultySelect); }
         } else if (state == GameStateId::Shop) {
             int itemCount = static_cast<int>(world.shopItems.size());
-            if (k == SDLK_UP || k == SDLK_w) {
+            if (itemCount <= 0) {
+                if (k == SDLK_n || k == SDLK_ESCAPE || k == SDLK_RETURN || k == SDLK_SPACE) {
+                    world.level += 1;
+                    world.wave = world.level;
+                    CombatSystem::spawnLevel(world);
+                    setMouseCapture(world, true);
+                    states.clearAndSet(GameStateId::Playing);
+                }
+            } else if (k == SDLK_UP || k == SDLK_w) {
                 world.shopCursor = (world.shopCursor - 1 + itemCount) % itemCount;
             } else if (k == SDLK_DOWN || k == SDLK_s) {
                 world.shopCursor = (world.shopCursor + 1) % itemCount;
@@ -109,13 +174,17 @@ void handleInput(World& world, StateMachine& states, const SDL_Event& event) {
                 world.settings.resolutionIndex = (world.settings.resolutionIndex + 1) % GameConstants::kNumResolutions;
                 world.width = GameConstants::kResolutions[world.settings.resolutionIndex][0];
                 world.height = GameConstants::kResolutions[world.settings.resolutionIndex][1];
+                SDL_SetWindowSize(window, world.width, world.height);
+                SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
             }
         } else if (state == GameStateId::UpgradeSelection) {
             auto pick = [&](int idx) {
-                if (idx < static_cast<int>(world.pendingUpgrades.size())) {
+                if (idx >= 0 && idx < static_cast<int>(world.pendingUpgrades.size())) {
                     CombatSystem::applyUpgrade(world, world.pendingUpgrades[idx]);
-                    world.wave += 1;
+                    world.level += 1;
+                    world.wave = world.level;
                     CombatSystem::spawnLevel(world);
+                    setMouseCapture(world, true);
                     states.clearAndSet(GameStateId::Playing);
                 }
             };
