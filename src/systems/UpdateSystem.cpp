@@ -85,8 +85,14 @@ void update(World& world, StateMachine& states, float dt) {
     Vec2 forward {std::cos(world.player.facingRadians), std::sin(world.player.facingRadians)};
     Vec2 right {-forward.y, forward.x};
     Vec2 dir {};
-    if (keyboard[SDL_SCANCODE_W]) { dir.x += forward.x; dir.y += forward.y; }
-    if (keyboard[SDL_SCANCODE_S]) { dir.x -= forward.x; dir.y -= forward.y; }
+    bool moveForward = keyboard[SDL_SCANCODE_W] != 0;
+    bool moveBackward = keyboard[SDL_SCANCODE_S] != 0;
+    if (world.settings.controlPreset == ControlPreset::ArrowMove) {
+        moveForward = keyboard[SDL_SCANCODE_UP] != 0;
+        moveBackward = keyboard[SDL_SCANCODE_DOWN] != 0;
+    }
+    if (moveForward) { dir.x += forward.x; dir.y += forward.y; }
+    if (moveBackward) { dir.x -= forward.x; dir.y -= forward.y; }
     if (keyboard[SDL_SCANCODE_A]) { dir.x -= right.x; dir.y -= right.y; }
     if (keyboard[SDL_SCANCODE_D]) { dir.x += right.x; dir.y += right.y; }
     dir = vecNormalize(dir);

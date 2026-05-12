@@ -4,11 +4,13 @@
 #include "systems/MathUtils.hpp"
 #include "systems/MazeGen.hpp"
 #include "systems/ParticleSystem.hpp"
+#include "systems/SaveSystem.hpp"
 
 #include <cassert>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <sstream>
 
 static int gPass = 0;
 static int gFail = 0;
@@ -513,6 +515,111 @@ void testPlayerDefaults() {
     CHECK(APPROX(p.levelUpFlash, 0.0F));
 }
 
+// ── Settings ─────────────────────────────────────────────────────────────────
+
+void testSettingsDefaults() {
+    World w {};
+    CHECK(APPROX(w.settings.masterVolume, 0.8F));
+    CHECK(APPROX(w.settings.musicVolume, 1.0F));
+    CHECK(APPROX(w.settings.sfxVolume, 1.0F));
+    CHECK(APPROX(w.settings.mouseSensitivity, 0.003F));
+    CHECK(w.settings.resolutionIndex == 2);
+    CHECK(!w.settings.muted);
+    CHECK(!w.settings.fullscreen);
+    CHECK(!w.settings.invertMouseX);
+    CHECK(w.settings.controlPreset == ControlPreset::Classic);
+    CHECK(w.settings.uiScaleIndex == 1);
+    CHECK(APPROX(w.settings.screenShakeScale, 1.0F));
+    CHECK(APPROX(w.settings.screenFlashScale, 1.0F));
+    CHECK(w.settings.minimapMode == MinimapMode::Toggle);
+    CHECK(APPROX(effectiveSfxVolume(w.settings), 0.8F));
+    CHECK(APPROX(effectiveMusicVolume(w.settings), 0.8F));
+}
+
+void testEffectiveVolumes() {
+    Settings s {};
+    s.masterVolume = 0.5F;
+    s.musicVolume = 0.25F;
+    s.sfxVolume = 0.75F;
+    CHECK(APPROX(effectiveMusicVolume(s), 0.125F));
+    CHECK(APPROX(effectiveSfxVolume(s), 0.375F));
+    s.muted = true;
+    CHECK(APPROX(effectiveMusicVolume(s), 0.0F));
+    CHECK(APPROX(effectiveSfxVolume(s), 0.0F));
+}
+
+void testLegacySettingsLoad() {
+    World w {};
+    std::istringstream in("0.25 0.004 0\n");
+    SaveSystem::loadSettingsFromStream(w, in);
+    CHECK(APPROX(w.settings.masterVolume, 0.25F));
+    CHECK(APPROX(w.settings.musicVolume, 1.0F));
+    CHECK(APPROX(w.settings.sfxVolume, 1.0F));
+    CHECK(APPROX(w.settings.mouseSensitivity, 0.004F));
+    CHECK(w.settings.resolutionIndex == 0);
+    CHECK(w.width == 640);
+    CHECK(w.height == 360);
+    CHECK(!w.settings.fullscreen);
+    CHECK(w.settings.controlPreset == ControlPreset::Classic);
+    CHECK(w.settings.minimapMode == MinimapMode::Toggle);
+}
+
+void testSettingsClampFromStream() {
+    World w {};
+    std::istringstream in("2 1.5 -0.5 2.0 0.02 99 1 0 1 99 -3 -1.0 2.0 99\n");
+    SaveSystem::loadSettingsFromStream(w, in);
+    CHECK(APPROX(w.settings.masterVolume, 1.0F));
+    CHECK(APPROX(w.settings.musicVolume, 0.0F));
+    CHECK(APPROX(w.settings.sfxVolume, 1.0F));
+    CHECK(APPROX(w.settings.mouseSensitivity, 0.010F));
+    CHECK(w.settings.resolutionIndex == 2);
+    CHECK(w.settings.muted);
+    CHECK(!w.settings.fullscreen);
+    CHECK(w.settings.invertMouseX);
+    CHECK(w.settings.controlPreset == ControlPreset::ArrowMove);
+    CHECK(w.settings.uiScaleIndex == 0);
+    CHECK(APPROX(w.settings.screenShakeScale, 0.0F));
+    CHECK(APPROX(w.settings.screenFlashScale, 1.0F));
+    CHECK(w.settings.minimapMode == MinimapMode::Off);
+}
+
+void testSettingsRoundTrip() {
+    World src {};
+    src.settings.masterVolume = 0.55F;
+    src.settings.musicVolume = 0.35F;
+    src.settings.sfxVolume = 0.75F;
+    src.settings.mouseSensitivity = 0.006F;
+    src.settings.resolutionIndex = 1;
+    src.settings.muted = true;
+    src.settings.fullscreen = true;
+    src.settings.invertMouseX = true;
+    src.settings.controlPreset = ControlPreset::ArrowMove;
+    src.settings.uiScaleIndex = 2;
+    src.settings.screenShakeScale = 0.5F;
+    src.settings.screenFlashScale = 0.0F;
+    src.settings.minimapMode = MinimapMode::AlwaysOn;
+
+    std::ostringstream out;
+    SaveSystem::saveSettingsToStream(src, out);
+
+    World dst {};
+    std::istringstream in(out.str());
+    SaveSystem::loadSettingsFromStream(dst, in);
+    CHECK(APPROX(dst.settings.masterVolume, src.settings.masterVolume));
+    CHECK(APPROX(dst.settings.musicVolume, src.settings.musicVolume));
+    CHECK(APPROX(dst.settings.sfxVolume, src.settings.sfxVolume));
+    CHECK(APPROX(dst.settings.mouseSensitivity, src.settings.mouseSensitivity));
+    CHECK(dst.settings.resolutionIndex == src.settings.resolutionIndex);
+    CHECK(dst.settings.muted == src.settings.muted);
+    CHECK(dst.settings.fullscreen == src.settings.fullscreen);
+    CHECK(dst.settings.invertMouseX == src.settings.invertMouseX);
+    CHECK(dst.settings.controlPreset == src.settings.controlPreset);
+    CHECK(dst.settings.uiScaleIndex == src.settings.uiScaleIndex);
+    CHECK(APPROX(dst.settings.screenShakeScale, src.settings.screenShakeScale));
+    CHECK(APPROX(dst.settings.screenFlashScale, src.settings.screenFlashScale));
+    CHECK(dst.settings.minimapMode == src.settings.minimapMode);
+}
+
 // ── main ────────────────────────────────────────────────────────────────────
 
 int main() {
@@ -547,6 +654,11 @@ int main() {
     testParticleEviction();
     testWorldDefaults();
     testPlayerDefaults();
+    testSettingsDefaults();
+    testEffectiveVolumes();
+    testLegacySettingsLoad();
+    testSettingsClampFromStream();
+    testSettingsRoundTrip();
 
     std::printf("%d passed, %d failed\n", gPass, gFail);
     return gFail > 0 ? 1 : 0;

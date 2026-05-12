@@ -73,6 +73,10 @@ bool Game::init() {
     }
 
     SDL_SetWindowHitTest(window_, hitTestCallback, &world_);
+    if (world_.settings.fullscreen) {
+        SDL_SetWindowFullscreen(window_, SDL_WINDOW_FULLSCREEN_DESKTOP);
+        SDL_GetWindowSize(window_, &world_.width, &world_.height);
+    }
 
     renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (renderer_ == nullptr) {
@@ -85,8 +89,8 @@ bool Game::init() {
 
     AudioSystem::init();
     MusicSystem::init();
-    AudioSystem::setMasterVolume(world_.settings.masterVolume);
-    MusicSystem::setVolume(world_.settings.masterVolume);
+    AudioSystem::setMasterVolume(effectiveSfxVolume(world_.settings));
+    MusicSystem::setVolume(effectiveMusicVolume(world_.settings));
     initialized_ = true;
     return true;
 }
@@ -117,9 +121,8 @@ void Game::run() {
             accumulator -= GameConstants::kFixedStep;
         }
 
-        float effectiveVol = world_.settings.muted ? 0.0F : world_.settings.masterVolume;
-        AudioSystem::setMasterVolume(effectiveVol);
-        MusicSystem::setVolume(effectiveVol);
+        AudioSystem::setMasterVolume(effectiveSfxVolume(world_.settings));
+        MusicSystem::setVolume(effectiveMusicVolume(world_.settings));
 
         RenderSystem::render(world_, states_.current(), renderer_, window_);
     }

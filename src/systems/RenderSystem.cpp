@@ -70,6 +70,118 @@ const uint32_t kKeyYellow = packRGBA(255, 230, 50);
 const uint32_t kExitGreen = packRGBA(40, 255, 120);
 const uint32_t kDoorBlue  = packRGBA(60, 100, 200);
 
+int clampInt(int value, int lo, int hi) {
+    return std::max(lo, std::min(hi, value));
+}
+
+const char* onOff(bool value) {
+    return value ? "On" : "Off";
+}
+
+const char* categoryName(int category) {
+    switch (static_cast<SettingsCategory>(category)) {
+        case SettingsCategory::Audio:         return "Audio";
+        case SettingsCategory::Controls:      return "Controls";
+        case SettingsCategory::Video:         return "Video";
+        case SettingsCategory::Accessibility: return "Access";
+        default:                              return "Settings";
+    }
+}
+
+int settingsRowCount(int category) {
+    switch (static_cast<SettingsCategory>(category)) {
+        case SettingsCategory::Audio:         return 4;
+        case SettingsCategory::Controls:      return 4;
+        case SettingsCategory::Video:         return 3;
+        case SettingsCategory::Accessibility: return 2;
+        default:                              return 1;
+    }
+}
+
+const char* uiScaleName(int scaleIndex) {
+    switch (scaleIndex) {
+        case 0:  return "Small";
+        case 2:  return "Large";
+        case 1:
+        default: return "Normal";
+    }
+}
+
+const char* controlPresetName(ControlPreset preset) {
+    switch (preset) {
+        case ControlPreset::ArrowMove: return "Arrow Move";
+        case ControlPreset::Classic:
+        default:                       return "Classic";
+    }
+}
+
+const char* minimapModeName(MinimapMode mode) {
+    switch (mode) {
+        case MinimapMode::Hold:     return "Hold";
+        case MinimapMode::AlwaysOn: return "Always On";
+        case MinimapMode::Off:      return "Off";
+        case MinimapMode::Toggle:
+        default:                    return "Toggle";
+    }
+}
+
+bool shouldRenderMinimap(const World& world, GameStateId state) {
+    if (state != GameStateId::Playing) return false;
+    switch (world.settings.minimapMode) {
+        case MinimapMode::AlwaysOn:
+            return true;
+        case MinimapMode::Off:
+            return false;
+        case MinimapMode::Hold: {
+            const Uint8* keyboard = SDL_GetKeyboardState(nullptr);
+            return keyboard[SDL_SCANCODE_TAB] != 0;
+        }
+        case MinimapMode::Toggle:
+        default:
+            return world.showMinimap;
+    }
+}
+
+void settingsRowText(const World& world, int category, int row, char* label, size_t labelSize, char* value, size_t valueSize) {
+    const Settings& s = world.settings;
+    switch (static_cast<SettingsCategory>(category)) {
+        case SettingsCategory::Audio:
+            if (row == 0) { std::snprintf(label, labelSize, "Master Volume"); std::snprintf(value, valueSize, "%d%%", static_cast<int>(s.masterVolume * 100.0F + 0.5F)); }
+            else if (row == 1) { std::snprintf(label, labelSize, "Music Volume"); std::snprintf(value, valueSize, "%d%%", static_cast<int>(s.musicVolume * 100.0F + 0.5F)); }
+            else if (row == 2) { std::snprintf(label, labelSize, "SFX Volume"); std::snprintf(value, valueSize, "%d%%", static_cast<int>(s.sfxVolume * 100.0F + 0.5F)); }
+            else { std::snprintf(label, labelSize, "Mute"); std::snprintf(value, valueSize, "%s", onOff(s.muted)); }
+            break;
+        case SettingsCategory::Controls:
+            if (row == 0) { std::snprintf(label, labelSize, "Control Preset"); std::snprintf(value, valueSize, "%s", controlPresetName(s.controlPreset)); }
+            else if (row == 1) { std::snprintf(label, labelSize, "Mouse Sensitivity"); std::snprintf(value, valueSize, "%.4f", static_cast<double>(s.mouseSensitivity)); }
+            else if (row == 2) { std::snprintf(label, labelSize, "Invert Mouse X"); std::snprintf(value, valueSize, "%s", onOff(s.invertMouseX)); }
+            else { std::snprintf(label, labelSize, "Minimap"); std::snprintf(value, valueSize, "%s", minimapModeName(s.minimapMode)); }
+            break;
+        case SettingsCategory::Video:
+            if (row == 0) {
+                int rw = GameConstants::kResolutions[s.resolutionIndex][0];
+                int rh = GameConstants::kResolutions[s.resolutionIndex][1];
+                std::snprintf(label, labelSize, "Window Size");
+                std::snprintf(value, valueSize, "%dx%d", rw, rh);
+            } else if (row == 1) {
+                std::snprintf(label, labelSize, "Fullscreen");
+                std::snprintf(value, valueSize, "%s", onOff(s.fullscreen));
+            } else {
+                std::snprintf(label, labelSize, "UI Scale");
+                std::snprintf(value, valueSize, "%s", uiScaleName(s.uiScaleIndex));
+            }
+            break;
+        case SettingsCategory::Accessibility:
+            if (row == 0) { std::snprintf(label, labelSize, "Screen Shake"); std::snprintf(value, valueSize, "%d%%", static_cast<int>(s.screenShakeScale * 100.0F + 0.5F)); }
+            else { std::snprintf(label, labelSize, "Screen Flash"); std::snprintf(value, valueSize, "%d%%", static_cast<int>(s.screenFlashScale * 100.0F + 0.5F)); }
+            break;
+        default:
+            std::snprintf(label, labelSize, "Setting");
+            std::snprintf(value, valueSize, "-");
+            break;
+    }
+}
+
 struct Canvas {
     uint32_t* px;
     int pp, w, h;
@@ -197,29 +309,46 @@ void renderGameOver(const Canvas& c, const World& world) {
 
 void renderSettings(const Canvas& c, const World& world) {
     c.gradient(packRGBA(10, 14, 30), packRGBA(28, 34, 65));
-    c.outlinedRect(c.w / 2 - 300, c.h / 2 - 160, 600, 320, kPanelBg, kPanelEdge, 2);
-    c.txt("SETTINGS", c.w / 2, c.h / 2 - 130, 4, kGold);
-    c.fill(c.w / 2 - 260, c.h / 2 - 100, 520, 2, kPanelEdge);
+    c.outlinedRect(c.w / 2 - 360, c.h / 2 - 210, 720, 420, kPanelBg, kPanelEdge, 2);
+    c.txt("SETTINGS", c.w / 2, c.h / 2 - 180, 4, kGold);
 
-    char volBuf[48];
-    int volPct = static_cast<int>(world.settings.masterVolume * 100.0F + 0.5F);
-    std::snprintf(volBuf, sizeof(volBuf), "Master Volume: %d%%", volPct);
-    c.txt(volBuf, c.w / 2, c.h / 2 - 70, 3, kOffWhite);
-    c.txt("[1] +   [2] -", c.w / 2, c.h / 2 - 45, 2, kDimWhite);
+    int category = clampInt(world.settingsCategory, 0, static_cast<int>(SettingsCategory::COUNT) - 1);
+    int categoryY = c.h / 2 - 140;
+    int tabW = 150;
+    int totalTabs = tabW * static_cast<int>(SettingsCategory::COUNT);
+    int tabX = c.w / 2 - totalTabs / 2;
+    for (int i = 0; i < static_cast<int>(SettingsCategory::COUNT); ++i) {
+        bool active = i == category;
+        c.outlinedRect(tabX + i * tabW, categoryY, tabW - 6, 32,
+                       active ? packRGBA(36, 58, 100) : packRGBA(24, 28, 42),
+                       active ? kCyan : packRGBA(55, 65, 90), 1);
+        c.txt(categoryName(i), tabX + i * tabW + (tabW - 6) / 2, categoryY + 16, 2, active ? kWhite : kDimWhite);
+    }
 
-    char sensBuf[48];
-    std::snprintf(sensBuf, sizeof(sensBuf), "Mouse Sensitivity: %.3f", static_cast<double>(world.settings.mouseSensitivity));
-    c.txt(sensBuf, c.w / 2, c.h / 2 - 10, 3, kOffWhite);
-    c.txt("[3] +   [4] -", c.w / 2, c.h / 2 + 15, 2, kDimWhite);
+    c.fill(c.w / 2 - 300, c.h / 2 - 92, 600, 2, kPanelEdge);
+    int rows = settingsRowCount(category);
+    int cursor = clampInt(world.settingsCursor, 0, rows - 1);
+    int rowTop = c.h / 2 - 70;
+    for (int i = 0; i < rows; ++i) {
+        int y = rowTop + i * 48;
+        bool selected = i == cursor;
+        c.outlinedRect(c.w / 2 - 280, y, 560, 38,
+                       selected ? packRGBA(38, 58, 95) : packRGBA(24, 28, 42),
+                       selected ? kCyan : packRGBA(50, 60, 85), 1);
+        char label[48], value[48];
+        settingsRowText(world, category, i, label, sizeof(label), value, sizeof(value));
+        c.txtL(label, c.w / 2 - 260, y + 11, 2, selected ? kWhite : kOffWhite);
+        int valueW = BitmapFont::textPixelWidth(value, 2);
+        c.txtL(value, c.w / 2 + 250 - valueW, y + 11, 2, selected ? kGold : kDimWhite);
+        if (selected) {
+            c.txtL("<", c.w / 2 + 176, y + 11, 2, kCyan);
+            c.txtL(">", c.w / 2 + 268, y + 11, 2, kCyan);
+        }
+    }
 
-    char resBuf[48];
-    int rw = GameConstants::kResolutions[world.settings.resolutionIndex][0];
-    int rh = GameConstants::kResolutions[world.settings.resolutionIndex][1];
-    std::snprintf(resBuf, sizeof(resBuf), "Resolution: %dx%d", rw, rh);
-    c.txt(resBuf, c.w / 2, c.h / 2 + 50, 3, kOffWhite);
-    c.txt("[5] Cycle", c.w / 2, c.h / 2 + 75, 2, kDimWhite);
-
-    c.txt("[ESC] Back", c.w / 2, c.h / 2 + 120, 2, kDimWhite);
+    c.fill(c.w / 2 - 300, c.h / 2 + 145, 600, 2, kPanelEdge);
+    c.txt("TAB category   W/S select   A/D adjust   ENTER toggle", c.w / 2, c.h / 2 + 168, 2, kDimWhite);
+    c.txt("[ESC] Back", c.w / 2, c.h / 2 + 192, 2, kDimWhite);
 }
 
 void renderShop(const Canvas& c, const World& world) {
@@ -271,9 +400,10 @@ void renderRaycasterScene(const Canvas& c, const World& world) {
     buildDecalGrid(world);
     constexpr float kFov = GameConstants::kFovRadians;
     float shakeOfsX = 0.0F, shakeOfsY = 0.0F;
-    if (world.shakeTimer > 0.0F) {
-        shakeOfsX = randomFloat(-world.shakeIntensity, world.shakeIntensity) * 0.01F;
-        shakeOfsY = randomFloat(-world.shakeIntensity, world.shakeIntensity) * 0.01F;
+    float shakeIntensity = world.shakeIntensity * world.settings.screenShakeScale;
+    if (world.shakeTimer > 0.0F && shakeIntensity > 0.0F) {
+        shakeOfsX = randomFloat(-shakeIntensity, shakeIntensity) * 0.01F;
+        shakeOfsY = randomFloat(-shakeIntensity, shakeIntensity) * 0.01F;
     }
 
     float dirX = std::cos(world.player.facingRadians), dirY = std::sin(world.player.facingRadians);
@@ -739,8 +869,8 @@ void renderMinimap(const Canvas& c, const World& world) {
 }
 
 void renderScreenEffects(const Canvas& c, const World& world) {
-    if (world.screenFlashTimer > 0.0F) {
-        float alpha2 = std::min(1.0F, world.screenFlashTimer / 0.15F) * 0.35F;
+    if (world.screenFlashTimer > 0.0F && world.settings.screenFlashScale > 0.0F) {
+        float alpha2 = std::min(1.0F, world.screenFlashTimer / 0.15F) * 0.35F * world.settings.screenFlashScale;
         c.fillAlpha(0, 0, c.w, c.h, world.screenFlashColor, alpha2);
     }
     if (world.player.shieldTimer > 0.0F) {
@@ -857,13 +987,14 @@ void render(const World& world, GameStateId state, SDL_Renderer* renderer, SDL_W
 
     // Internal render resolution: 3D scenes render below native resolution,
     // menu screens render at a fixed logical size so pixel-font UI scales up on large windows.
-    constexpr int kScale = GameConstants::kRenderScale;
-    constexpr int kMenuRenderW = GameConstants::kResolutions[1][0];
-    constexpr int kMenuRenderH = GameConstants::kResolutions[1][1];
     bool is3D = (state == GameStateId::Playing || state == GameStateId::Paused ||
                  state == GameStateId::UpgradeSelection);
-    const int rw = is3D ? std::max(1, world.width / kScale) : kMenuRenderW;
-    const int rh = is3D ? std::max(1, world.height / kScale) : kMenuRenderH;
+    int uiScaleIndex = clampInt(world.settings.uiScaleIndex, 0, 2);
+    const int renderScale = is3D ? (uiScaleIndex == 2 ? 3 : (uiScaleIndex == 0 ? 1 : GameConstants::kRenderScale)) : 1;
+    const int menuRenderW = (uiScaleIndex == 2) ? 960 : ((uiScaleIndex == 0) ? 1600 : GameConstants::kResolutions[1][0]);
+    const int menuRenderH = (uiScaleIndex == 2) ? 540 : ((uiScaleIndex == 0) ? 900 : GameConstants::kResolutions[1][1]);
+    const int rw = is3D ? std::max(1, world.width / renderScale) : menuRenderW;
+    const int rh = is3D ? std::max(1, world.height / renderScale) : menuRenderH;
 
     if (gFramebuffer == nullptr || gFbWidth != rw || gFbHeight != rh) {
         if (gFramebuffer != nullptr) SDL_DestroyTexture(gFramebuffer);
@@ -913,7 +1044,7 @@ void render(const World& world, GameStateId state, SDL_Renderer* renderer, SDL_W
         case GameStateId::UpgradeSelection:
             renderRaycasterScene(canvas, world);
             renderHUD(canvas, world);
-            if (world.showMinimap && state == GameStateId::Playing)
+            if (shouldRenderMinimap(world, state))
                 renderMinimap(canvas, world);
             renderScreenEffects(canvas, world);
             if (state == GameStateId::Paused)

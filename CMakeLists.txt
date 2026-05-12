@@ -51,6 +51,7 @@ add_executable(gameplay_tests
     src/systems/Map.cpp
     src/systems/MazeGen.cpp
     src/systems/ParticleSystem.cpp
+    src/systems/SaveSystem.cpp
 )
 target_include_directories(gameplay_tests PRIVATE src)
 target_compile_options(gameplay_tests PRIVATE ${GAME_COMMON_WARNINGS})

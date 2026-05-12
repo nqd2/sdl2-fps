@@ -173,13 +173,51 @@ struct LeaderboardEntry {
     float timeSeconds {0.0F};
 };
 
+enum class ControlPreset {
+    Classic,
+    ArrowMove,
+    COUNT,
+};
+
+enum class MinimapMode {
+    Toggle,
+    Hold,
+    AlwaysOn,
+    Off,
+    COUNT,
+};
+
+enum class SettingsCategory {
+    Audio,
+    Controls,
+    Video,
+    Accessibility,
+    COUNT,
+};
+
 struct Settings {
     float masterVolume {0.8F};
+    float musicVolume {1.0F};
+    float sfxVolume {1.0F};
     float mouseSensitivity {0.003F};
     int resolutionIndex {2};
     bool muted {false};
-    float volumeBeforeMute {0.8F};
+    bool fullscreen {false};
+    bool invertMouseX {false};
+    ControlPreset controlPreset {ControlPreset::Classic};
+    int uiScaleIndex {1};
+    float screenShakeScale {1.0F};
+    float screenFlashScale {1.0F};
+    MinimapMode minimapMode {MinimapMode::Toggle};
 };
+
+inline float effectiveSfxVolume(const Settings& settings) {
+    return settings.muted ? 0.0F : settings.masterVolume * settings.sfxVolume;
+}
+
+inline float effectiveMusicVolume(const Settings& settings) {
+    return settings.muted ? 0.0F : settings.masterVolume * settings.musicVolume;
+}
 
 struct Player {
     Vec2 position {};
@@ -257,6 +295,8 @@ struct World {
 
     Player player {};
     Settings settings {};
+    int settingsCategory {0};
+    int settingsCursor {0};
     std::vector<Enemy> enemies;
     std::vector<Projectile> projectiles;
     std::vector<UpgradeOption> pendingUpgrades;

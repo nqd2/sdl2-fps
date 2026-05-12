@@ -1,12 +1,14 @@
 #include "systems/InputSystem.hpp"
 #include "systems/CombatSystem.hpp"
 #include "systems/MathUtils.hpp"
+#include "systems/SaveSystem.hpp"
 #include "data/GameData.hpp"
 #include "GameConstants.hpp"
 
 #include <SDL.h>
 
 #include <algorithm>
+#include <cmath>
 
 namespace InputSystem {
 
@@ -22,6 +24,28 @@ void setMouseCapture(World& world, bool capture) {
 
 namespace {
 
+float clampFloat(float value, float lo, float hi) {
+    return std::max(lo, std::min(hi, value));
+}
+
+int clampInt(int value, int lo, int hi) {
+    return std::max(lo, std::min(hi, value));
+}
+
+int categoryCount() {
+    return static_cast<int>(SettingsCategory::COUNT);
+}
+
+int rowsForCategory(int category) {
+    switch (static_cast<SettingsCategory>(category)) {
+        case SettingsCategory::Audio:         return 4;
+        case SettingsCategory::Controls:      return 4;
+        case SettingsCategory::Video:         return 3;
+        case SettingsCategory::Accessibility: return 2;
+        default:                              return 1;
+    }
+}
+
 TitleBarButton hitTestTitleButton(const World& world, int mx, int my) {
     if (my >= kTitleBarHeight) return TitleBarButton::None;
     int btnW = 46;
@@ -34,6 +58,95 @@ TitleBarButton hitTestTitleButton(const World& world, int mx, int my) {
     if (mx >= minX)              return TitleBarButton::Minimize;
     if (mx >= muteX)             return TitleBarButton::Mute;
     return TitleBarButton::None;
+}
+
+void applyDisplaySettings(World& world, SDL_Window* window) {
+    if (world.settings.fullscreen) {
+        SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
+        SDL_GetWindowSize(window, &world.width, &world.height);
+        return;
+    }
+
+    SDL_SetWindowFullscreen(window, 0);
+    world.width = GameConstants::kResolutions[world.settings.resolutionIndex][0];
+    world.height = GameConstants::kResolutions[world.settings.resolutionIndex][1];
+    SDL_SetWindowSize(window, world.width, world.height);
+    SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+}
+
+void saveSettings(World& world) {
+    world.player.mouseSensitivity = world.settings.mouseSensitivity;
+    SaveSystem::save(world);
+}
+
+bool adjustFloat(float& value, float delta, float lo, float hi) {
+    float next = clampFloat(value + delta, lo, hi);
+    if (std::fabs(next - value) < 0.0001F) return false;
+    value = next;
+    return true;
+}
+
+bool cycleInt(int& value, int delta, int lo, int hi) {
+    int next = value + delta;
+    if (next < lo) next = hi;
+    if (next > hi) next = lo;
+    if (next == value) return false;
+    value = next;
+    return true;
+}
+
+bool adjustSetting(World& world, SDL_Window* window, int delta, bool activate) {
+    Settings& s = world.settings;
+    int category = clampInt(world.settingsCategory, 0, categoryCount() - 1);
+    int row = clampInt(world.settingsCursor, 0, rowsForCategory(category) - 1);
+    int step = activate && delta == 0 ? 1 : delta;
+    bool changed = false;
+
+    switch (static_cast<SettingsCategory>(category)) {
+        case SettingsCategory::Audio:
+            if (row == 0) changed = adjustFloat(s.masterVolume, 0.05F * static_cast<float>(step), 0.0F, 1.0F);
+            else if (row == 1) changed = adjustFloat(s.musicVolume, 0.05F * static_cast<float>(step), 0.0F, 1.0F);
+            else if (row == 2) changed = adjustFloat(s.sfxVolume, 0.05F * static_cast<float>(step), 0.0F, 1.0F);
+            else if (row == 3 && (activate || delta != 0)) { s.muted = !s.muted; changed = true; }
+            break;
+        case SettingsCategory::Controls:
+            if (row == 0) {
+                int preset = static_cast<int>(s.controlPreset);
+                changed = cycleInt(preset, step, 0, static_cast<int>(ControlPreset::COUNT) - 1);
+                s.controlPreset = static_cast<ControlPreset>(preset);
+            } else if (row == 1) {
+                changed = adjustFloat(s.mouseSensitivity, 0.0005F * static_cast<float>(step), 0.001F, 0.010F);
+            } else if (row == 2 && (activate || delta != 0)) {
+                s.invertMouseX = !s.invertMouseX;
+                changed = true;
+            } else if (row == 3) {
+                int minimap = static_cast<int>(s.minimapMode);
+                changed = cycleInt(minimap, step, 0, static_cast<int>(MinimapMode::COUNT) - 1);
+                s.minimapMode = static_cast<MinimapMode>(minimap);
+            }
+            break;
+        case SettingsCategory::Video:
+            if (row == 0) {
+                changed = cycleInt(s.resolutionIndex, step, 0, GameConstants::kNumResolutions - 1);
+                if (changed && !s.fullscreen) applyDisplaySettings(world, window);
+            } else if (row == 1 && (activate || delta != 0)) {
+                s.fullscreen = !s.fullscreen;
+                applyDisplaySettings(world, window);
+                changed = true;
+            } else if (row == 2) {
+                changed = cycleInt(s.uiScaleIndex, step, 0, 2);
+            }
+            break;
+        case SettingsCategory::Accessibility:
+            if (row == 0) changed = adjustFloat(s.screenShakeScale, 0.5F * static_cast<float>(step), 0.0F, 1.0F);
+            else if (row == 1) changed = adjustFloat(s.screenFlashScale, 0.5F * static_cast<float>(step), 0.0F, 1.0F);
+            break;
+        default:
+            break;
+    }
+
+    if (changed) saveSettings(world);
+    return changed;
 }
 
 }  // namespace
@@ -66,13 +179,8 @@ void handleInput(World& world, StateMachine& states, const SDL_Event& event, SDL
                 return;
             }
             case TitleBarButton::Mute:
-                if (world.settings.muted) {
-                    world.settings.muted = false;
-                    world.settings.masterVolume = world.settings.volumeBeforeMute;
-                } else {
-                    world.settings.volumeBeforeMute = world.settings.masterVolume;
-                    world.settings.muted = true;
-                }
+                world.settings.muted = !world.settings.muted;
+                saveSettings(world);
                 return;
             case TitleBarButton::None:
                 break;
@@ -82,8 +190,9 @@ void handleInput(World& world, StateMachine& states, const SDL_Event& event, SDL
     const GameStateId state = states.current();
 
     if (event.type == SDL_MOUSEMOTION && state == GameStateId::Playing && world.mouseCaptured) {
+        float mouseDir = world.settings.invertMouseX ? -1.0F : 1.0F;
         world.player.facingRadians = wrapAngle(
-            world.player.facingRadians + static_cast<float>(event.motion.xrel) * world.player.mouseSensitivity);
+            world.player.facingRadians + static_cast<float>(event.motion.xrel) * world.player.mouseSensitivity * mouseDir);
     }
 
     if (event.type == SDL_KEYDOWN) {
@@ -160,22 +269,23 @@ void handleInput(World& world, StateMachine& states, const SDL_Event& event, SDL
                 states.clearAndSet(GameStateId::Playing);
             }
         } else if (state == GameStateId::Settings) {
-            if (k == SDLK_1) {
-                world.settings.masterVolume = std::min(1.0F, world.settings.masterVolume + 0.1F);
-            } else if (k == SDLK_2) {
-                world.settings.masterVolume = std::max(0.0F, world.settings.masterVolume - 0.1F);
-            } else if (k == SDLK_3) {
-                world.settings.mouseSensitivity = std::min(0.010F, world.settings.mouseSensitivity + 0.001F);
-                world.player.mouseSensitivity = world.settings.mouseSensitivity;
-            } else if (k == SDLK_4) {
-                world.settings.mouseSensitivity = std::max(0.001F, world.settings.mouseSensitivity - 0.001F);
-                world.player.mouseSensitivity = world.settings.mouseSensitivity;
-            } else if (k == SDLK_5) {
-                world.settings.resolutionIndex = (world.settings.resolutionIndex + 1) % GameConstants::kNumResolutions;
-                world.width = GameConstants::kResolutions[world.settings.resolutionIndex][0];
-                world.height = GameConstants::kResolutions[world.settings.resolutionIndex][1];
-                SDL_SetWindowSize(window, world.width, world.height);
-                SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+            world.settingsCategory = clampInt(world.settingsCategory, 0, categoryCount() - 1);
+            world.settingsCursor = clampInt(world.settingsCursor, 0, rowsForCategory(world.settingsCategory) - 1);
+            if (k == SDLK_TAB) {
+                world.settingsCategory = (world.settingsCategory + 1) % categoryCount();
+                world.settingsCursor = 0;
+            } else if (k == SDLK_UP || k == SDLK_w) {
+                int rowCount = rowsForCategory(world.settingsCategory);
+                world.settingsCursor = (world.settingsCursor - 1 + rowCount) % rowCount;
+            } else if (k == SDLK_DOWN || k == SDLK_s) {
+                int rowCount = rowsForCategory(world.settingsCategory);
+                world.settingsCursor = (world.settingsCursor + 1) % rowCount;
+            } else if (k == SDLK_LEFT || k == SDLK_a) {
+                adjustSetting(world, window, -1, false);
+            } else if (k == SDLK_RIGHT || k == SDLK_d) {
+                adjustSetting(world, window, 1, false);
+            } else if (k == SDLK_RETURN || k == SDLK_SPACE) {
+                adjustSetting(world, window, 0, true);
             }
         } else if (state == GameStateId::UpgradeSelection) {
             auto pick = [&](int idx) {
@@ -195,7 +305,7 @@ void handleInput(World& world, StateMachine& states, const SDL_Event& event, SDL
             if (k == SDLK_1) world.player.currentWeapon = WeaponType::Pistol;
             else if (k == SDLK_2 && world.player.unlockedWeapons >= 2) world.player.currentWeapon = WeaponType::Shotgun;
             else if (k == SDLK_3 && world.player.unlockedWeapons >= 3) world.player.currentWeapon = WeaponType::Rapid;
-            else if (k == SDLK_TAB) world.showMinimap = !world.showMinimap;
+            else if (k == SDLK_TAB && world.settings.minimapMode == MinimapMode::Toggle) world.showMinimap = !world.showMinimap;
             else if (k == SDLK_e) CombatSystem::tryOpenDoor(world);
 
             // F1-F7: stat allocation
