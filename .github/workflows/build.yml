@@ -1,0 +1,104 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libsdl2-dev ninja-build
+
+      - name: Configure and build
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Strip binary
+        run: strip build/iron_maze
+
+      - name: Package artifact
+        run: |
+          mkdir -p dist/iron-maze-linux-x86_64
+          cp build/iron_maze dist/iron-maze-linux-x86_64/
+          {
+            echo 'Iron Maze — Linux x86_64 build (GitHub Actions)'
+            echo ''
+            echo 'Run: ./iron_maze'
+            echo ''
+            echo 'Requires SDL 2 at runtime, for example on Debian/Ubuntu:'
+            echo '  sudo apt install libsdl2-2.0-0'
+          } > dist/iron-maze-linux-x86_64/README.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iron-maze-linux-x86_64
+          path: dist/iron-maze-linux-x86_64
+
+  windows:
+    runs-on: windows-2022
+    env:
+      VCPKG_DEFAULT_TRIPLET: x64-windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bootstrap vcpkg
+        shell: pwsh
+        run: |
+          $vcpkgRoot = Join-Path $env:GITHUB_WORKSPACE "vcpkg"
+          git clone --depth 1 https://github.com/microsoft/vcpkg.git $vcpkgRoot
+          & "$vcpkgRoot\bootstrap-vcpkg.bat" -disableMetrics
+
+      - name: Install SDL2
+        shell: pwsh
+        run: |
+          $vcpkgRoot = Join-Path $env:GITHUB_WORKSPACE "vcpkg"
+          & "$vcpkgRoot\vcpkg.exe" install sdl2:x64-windows --clean-after-build
+
+      - name: Configure and build
+        shell: pwsh
+        run: |
+          $vcpkgRoot = Join-Path $env:GITHUB_WORKSPACE "vcpkg"
+          $toolchain = Join-Path $vcpkgRoot "scripts\buildsystems\vcpkg.cmake"
+          cmake -B build -G "Visual Studio 17 2022" -A x64 `
+            -DCMAKE_TOOLCHAIN_FILE="$toolchain"
+          cmake --build build --config Release --parallel
+
+      - name: Test
+        shell: pwsh
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Package artifact
+        shell: pwsh
+        run: |
+          $out = "dist/iron-maze-windows-x64"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Copy-Item "build/Release/iron_maze.exe" $out
+          $sdl = Join-Path $env:GITHUB_WORKSPACE "vcpkg/installed/x64-windows/bin/SDL2.dll"
+          Copy-Item $sdl $out -ErrorAction Stop
+          @"
+          Iron Maze — Windows x64 build (GitHub Actions)
+
+          Extract this folder and run iron_maze.exe.
+
+          SDL2.dll is included next to the executable.
+          If Windows reports a missing MSVC runtime, install "Microsoft Visual C++ Redistributable for Visual Studio 2022" (x64) from Microsoft.
+          "@ | Set-Content -Path "$out/README.txt" -Encoding utf8
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iron-maze-windows-x64
+          path: dist/iron-maze-windows-x64

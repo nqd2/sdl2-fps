@@ -69,4 +69,6 @@ vcpkg_installed/
 .*/
 
 *lock.json
-.sav
+.
+
+!.github/
