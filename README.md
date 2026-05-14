@@ -107,10 +107,5 @@ docs/
   screenshot_gameplay.png      In-game capture
 ```
 
-## Architecture
-
-- **SOLID design**: each system handles one domain (audio, rendering, combat, input, etc.)
-- **Data-driven**: all game state lives in a central `World` struct passed to systems by reference
-- **No external assets**: textures generated from math (brick patterns, noise), audio from waveform synthesis
-- **Fixed timestep**: game logic runs at 120 Hz, decoupled from render rate
-- **Production hardened**: cached framebuffers, persistent render buffers, error-checked SDL calls, bounded RNG loops, platform-appropriate save paths
+## Notes
+- This game does not have any OpenGL/Vulkan/DirectX/Metal/etc. dependencies so its completely CPU-bound. 
