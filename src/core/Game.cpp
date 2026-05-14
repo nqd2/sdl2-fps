@@ -22,7 +22,7 @@ SDL_HitTestResult hitTestCallback(SDL_Window* /*win*/, const SDL_Point* area, vo
 
     if (y >= kTitleBarHeight) return SDL_HITTEST_NORMAL;
 
-    int btnW = 46;
+    int btnW = 52;
     int closeX = w - btnW;
     int maxX   = closeX - btnW;
     int minX   = maxX - btnW;

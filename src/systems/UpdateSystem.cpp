@@ -118,6 +118,12 @@ void update(World& world, StateMachine& states, float dt) {
             AudioSystem::play(SoundId::LevelClear);
             world.bestLevel = std::max(world.bestLevel, world.level);
             CombatSystem::prepareShop(world);
+            if (world.shopItems.empty()) {
+                world.level += 1;
+                world.wave = world.level;
+                CombatSystem::spawnLevel(world);
+                return;
+            }
             InputSystem::setMouseCapture(world, false);
             states.clearAndSet(GameStateId::Shop);
             return;

@@ -1,10 +1,14 @@
 #include "data/GameData.hpp"
 #include "GameConstants.hpp"
+#include "core/StateMachine.hpp"
+#include "systems/InputSystem.hpp"
 #include "systems/Map.hpp"
 #include "systems/MathUtils.hpp"
 #include "systems/MazeGen.hpp"
 #include "systems/ParticleSystem.hpp"
 #include "systems/SaveSystem.hpp"
+
+#include <SDL.h>
 
 #include <cassert>
 #include <cmath>
@@ -53,6 +57,13 @@ static World makeStaticMapWorld() {
             w.mapGrid[y * 16 + x] = rows[y][x];
     w.explored.assign(16 * 16, true);
     return w;
+}
+
+static SDL_Event keyDown(SDL_Keycode key) {
+    SDL_Event event {};
+    event.type = SDL_KEYDOWN;
+    event.key.keysym.sym = key;
+    return event;
 }
 
 // ── DifficultySettings ──────────────────────────────────────────────────────
@@ -620,9 +631,156 @@ void testSettingsRoundTrip() {
     CHECK(dst.settings.minimapMode == src.settings.minimapMode);
 }
 
+// ── State/input transitions ─────────────────────────────────────────────────
+
+void testShopEscapeAdvancesOneLevelOnly() {
+    World world {};
+    StateMachine states;
+    states.clearAndSet(GameStateId::Shop);
+    world.level = 4;
+    world.wave = 4;
+    world.runSeed = 1234;
+    world.shopItems.push_back(ShopItem {"Med Kit", "Restore HP", 20, ShopItem::Type::Health, -1});
+
+    InputSystem::handleInput(world, states, keyDown(SDLK_ESCAPE), nullptr);
+
+    CHECK(states.current() == GameStateId::Playing);
+    CHECK(world.level == 5);
+    CHECK(world.wave == 5);
+}
+
+void testShopCanReturnToMainMenu() {
+    World world {};
+    StateMachine states;
+    states.clearAndSet(GameStateId::Shop);
+    world.level = 4;
+    world.wave = 4;
+    world.shopItems.push_back(ShopItem {"Med Kit", "Restore HP", 20, ShopItem::Type::Health, -1});
+
+    InputSystem::handleInput(world, states, keyDown(SDLK_q), nullptr);
+
+    CHECK(states.current() == GameStateId::MainMenu);
+    CHECK(world.level == 4);
+    CHECK(world.wave == 4);
+}
+
+void testEmptyShopIgnoresNavigationAndCanAdvance() {
+    World world {};
+    StateMachine states;
+    states.clearAndSet(GameStateId::Shop);
+    world.level = 2;
+    world.wave = 2;
+    world.shopCursor = 0;
+    world.runSeed = 5678;
+
+    InputSystem::handleInput(world, states, keyDown(SDLK_w), nullptr);
+
+    CHECK(states.current() == GameStateId::Shop);
+    CHECK(world.level == 2);
+    CHECK(world.shopCursor == 0);
+
+    InputSystem::handleInput(world, states, keyDown(SDLK_n), nullptr);
+
+    CHECK(states.current() == GameStateId::Playing);
+    CHECK(world.level == 3);
+    CHECK(world.wave == 3);
+}
+
+void testPausedResumeAndQuitToMainMenu() {
+    World world {};
+    StateMachine states;
+    states.clearAndSet(GameStateId::Playing);
+    states.push(GameStateId::Paused);
+
+    InputSystem::handleInput(world, states, keyDown(SDLK_ESCAPE), nullptr);
+
+    CHECK(states.current() == GameStateId::Playing);
+
+    states.push(GameStateId::Paused);
+    InputSystem::handleInput(world, states, keyDown(SDLK_q), nullptr);
+
+    CHECK(states.current() == GameStateId::MainMenu);
+    CHECK(!world.quitRequested);
+}
+
+void testGameOverRetryMenuAndLeaderboard() {
+    {
+        World world {};
+        StateMachine states;
+        states.clearAndSet(GameStateId::GameOver);
+        world.difficulty = Difficulty::Hard;
+        world.level = 7;
+        world.score = 900;
+
+        InputSystem::handleInput(world, states, keyDown(SDLK_RETURN), nullptr);
+
+        CHECK(states.current() == GameStateId::Playing);
+        CHECK(world.difficulty == Difficulty::Hard);
+        CHECK(world.level == 1);
+        CHECK(world.score == 0);
+        CHECK(world.runActive);
+    }
+
+    {
+        World world {};
+        StateMachine states;
+        states.clearAndSet(GameStateId::GameOver);
+
+        InputSystem::handleInput(world, states, keyDown(SDLK_l), nullptr);
+        CHECK(states.current() == GameStateId::Leaderboard);
+
+        states.clearAndSet(GameStateId::GameOver);
+        InputSystem::handleInput(world, states, keyDown(SDLK_ESCAPE), nullptr);
+        CHECK(states.current() == GameStateId::MainMenu);
+        CHECK(!world.quitRequested);
+    }
+}
+
+void testUpgradeSelectionInvalidPickAndSkip() {
+    World world {};
+    StateMachine states;
+    states.clearAndSet(GameStateId::UpgradeSelection);
+    world.level = 3;
+    world.wave = 3;
+    world.runSeed = 9012;
+    world.pendingUpgrades = pickUpgradeChoices(world.wave);
+    world.pendingUpgrades.resize(2);
+
+    InputSystem::handleInput(world, states, keyDown(SDLK_3), nullptr);
+
+    CHECK(states.current() == GameStateId::UpgradeSelection);
+    CHECK(world.level == 3);
+
+    InputSystem::handleInput(world, states, keyDown(SDLK_ESCAPE), nullptr);
+
+    CHECK(states.current() == GameStateId::Playing);
+    CHECK(world.level == 4);
+    CHECK(world.pendingUpgrades.empty());
+}
+
+void testUpgradeSelectionCanReturnToMainMenu() {
+    World world {};
+    StateMachine states;
+    states.clearAndSet(GameStateId::UpgradeSelection);
+    world.level = 3;
+    world.wave = 3;
+    world.pendingUpgrades = pickUpgradeChoices(world.wave);
+
+    InputSystem::handleInput(world, states, keyDown(SDLK_q), nullptr);
+
+    CHECK(states.current() == GameStateId::MainMenu);
+    CHECK(world.level == 3);
+    CHECK(world.wave == 3);
+}
+
 // ── main ────────────────────────────────────────────────────────────────────
 
 int main() {
+    if (SDL_Init(SDL_INIT_TIMER | SDL_INIT_EVENTS) != 0) {
+        std::fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
+        return 1;
+    }
+
     testDifficultySettings();
     testIsValidDifficulty();
     testWeaponSpecs();
@@ -659,7 +817,15 @@ int main() {
     testLegacySettingsLoad();
     testSettingsClampFromStream();
     testSettingsRoundTrip();
+    testShopEscapeAdvancesOneLevelOnly();
+    testShopCanReturnToMainMenu();
+    testEmptyShopIgnoresNavigationAndCanAdvance();
+    testPausedResumeAndQuitToMainMenu();
+    testGameOverRetryMenuAndLeaderboard();
+    testUpgradeSelectionInvalidPickAndSkip();
+    testUpgradeSelectionCanReturnToMainMenu();
 
     std::printf("%d passed, %d failed\n", gPass, gFail);
+    SDL_Quit();
     return gFail > 0 ? 1 : 0;
 }

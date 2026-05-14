@@ -218,6 +218,24 @@ struct Canvas {
         BitmapFont::drawText(px, pp, w, h, t, lx, ly, s, c);
     }
 
+    int fitScale(const char* t, int preferredScale, int maxWidth) const {
+        int scale = std::max(1, preferredScale);
+        while (scale > 1 && BitmapFont::textPixelWidth(t, scale) > maxWidth) --scale;
+        return scale;
+    }
+
+    void txtFit(const char* t, int cx, int cy, int preferredScale, int maxWidth, uint32_t c) const {
+        txt(t, cx, cy, fitScale(t, preferredScale, maxWidth), c);
+    }
+
+    void txtFitL(const char* t, int lx, int ly, int preferredScale, int maxWidth, uint32_t c) const {
+        BitmapFont::drawText(px, pp, w, h, t, lx, ly, fitScale(t, preferredScale, maxWidth), c);
+    }
+
+    void txtR(const char* t, int rightX, int y, int scale, uint32_t c) const {
+        BitmapFont::drawText(px, pp, w, h, t, rightX - BitmapFont::textPixelWidth(t, scale), y, scale, c);
+    }
+
     void gradient(uint32_t topColor, uint32_t bottomColor) const {
         for (int y = 0; y < h; ++y) {
             float t = static_cast<float>(y) / static_cast<float>(h);
@@ -249,21 +267,28 @@ void renderMainMenu(const Canvas& c, const World& world) {
     c.txt(bestBuf, c.w / 2, c.h / 2 + 130, 2, kDimWhite);
 }
 
+void renderDifficultyRow(const Canvas& c, int x, int y, int w, uint32_t bg, uint32_t border,
+                         uint32_t primaryColor, const char* primary, const char* detail) {
+    c.outlinedRect(x, y, w, 54, bg, border, 2);
+    c.txtFitL(primary, x + 28, y + 16, 3, w / 2 - 32, primaryColor);
+    c.txtR(detail, x + w - 28, y + 21, 2, kDimWhite);
+}
+
 void renderDifficultySelect(const Canvas& c) {
     c.gradient(packRGBA(10, 14, 30), packRGBA(28, 34, 65));
-    c.outlinedRect(c.w / 2 - 260, c.h / 2 - 140, 520, 280, kPanelBg, kPanelEdge, 2);
-    c.txt("SELECT DIFFICULTY", c.w / 2, c.h / 2 - 110, 4, kGold);
-    c.fill(c.w / 2 - 200, c.h / 2 - 78, 400, 2, kPanelEdge);
-    c.outlinedRect(c.w / 2 - 200, c.h / 2 - 60, 400, 50, packRGBA(30, 50, 30), packRGBA(80, 220, 115), 2);
-    c.txt("[1] EASY", c.w / 2 - 50, c.h / 2 - 35, 3, kGreen);
-    c.txtL("0.7x HP  0.5x Score", c.w / 2 + 40, c.h / 2 - 40, 2, kDimWhite);
-    c.outlinedRect(c.w / 2 - 200, c.h / 2 + 0, 400, 50, packRGBA(35, 35, 50), packRGBA(88, 140, 255), 2);
-    c.txt("[2] NORMAL", c.w / 2 - 40, c.h / 2 + 25, 3, kCyan);
-    c.txtL("Standard", c.w / 2 + 55, c.h / 2 + 20, 2, kDimWhite);
-    c.outlinedRect(c.w / 2 - 200, c.h / 2 + 60, 400, 50, packRGBA(50, 30, 30), packRGBA(255, 90, 90), 2);
-    c.txt("[3] HARD", c.w / 2 - 50, c.h / 2 + 85, 3, kRed);
-    c.txtL("1.4x HP  1.5x Score", c.w / 2 + 40, c.h / 2 + 80, 2, kDimWhite);
-    c.txt("[ESC] Back", c.w / 2, c.h / 2 + 125, 2, kDimWhite);
+    c.outlinedRect(c.w / 2 - 360, c.h / 2 - 185, 720, 370, kPanelBg, kPanelEdge, 2);
+    c.txt("SELECT DIFFICULTY", c.w / 2, c.h / 2 - 145, 4, kGold);
+    c.fill(c.w / 2 - 300, c.h / 2 - 100, 600, 2, kPanelEdge);
+
+    const int rowX = c.w / 2 - 300;
+    const int rowW = 600;
+    renderDifficultyRow(c, rowX, c.h / 2 - 75, rowW, packRGBA(30, 50, 30), packRGBA(80, 220, 115),
+                        kGreen, "[1] EASY", "0.7x HP   0.5x Score");
+    renderDifficultyRow(c, rowX, c.h / 2 - 10, rowW, packRGBA(35, 35, 50), packRGBA(88, 140, 255),
+                        kCyan, "[2] NORMAL", "Standard");
+    renderDifficultyRow(c, rowX, c.h / 2 + 55, rowW, packRGBA(50, 30, 30), packRGBA(255, 90, 90),
+                        kRed, "[3] HARD", "1.4x HP   1.5x Score");
+    c.txt("[ESC] Back", c.w / 2, c.h / 2 + 155, 2, kDimWhite);
 }
 
 void renderLeaderboard(const Canvas& c, const World& world) {
@@ -288,28 +313,29 @@ void renderLeaderboard(const Canvas& c, const World& world) {
 
 void renderGameOver(const Canvas& c, const World& world) {
     c.gradient(packRGBA(18, 8, 8), packRGBA(30, 16, 18));
-    c.outlinedRect(c.w / 2 - 280, c.h / 2 - 150, 560, 300, packRGBA(25, 12, 12), packRGBA(160, 50, 50), 2);
-    c.txt("GAME OVER", c.w / 2, c.h / 2 - 110, 5, kRed);
-    c.fill(c.w / 2 - 180, c.h / 2 - 72, 360, 2, packRGBA(120, 40, 40));
+    c.outlinedRect(c.w / 2 - 300, c.h / 2 - 170, 600, 340, packRGBA(25, 12, 12), packRGBA(160, 50, 50), 2);
+    c.txt("GAME OVER", c.w / 2, c.h / 2 - 130, 5, kRed);
+    c.fill(c.w / 2 - 200, c.h / 2 - 92, 400, 2, packRGBA(120, 40, 40));
     char fs[48]; std::snprintf(fs, sizeof(fs), "Final Score: %d", world.score);
-    c.txt(fs, c.w / 2, c.h / 2 - 45, 3, kGold);
+    c.txt(fs, c.w / 2, c.h / 2 - 65, 3, kGold);
     char fw[48]; std::snprintf(fw, sizeof(fw), "Reached Level %d", world.level);
-    c.txt(fw, c.w / 2, c.h / 2 - 10, 2, kOffWhite);
+    c.txt(fw, c.w / 2, c.h / 2 - 30, 2, kOffWhite);
     char pl[48]; std::snprintf(pl, sizeof(pl), "Player Lv: %d", world.player.playerLevel);
-    c.txt(pl, c.w / 2, c.h / 2 + 18, 2, packRGBA(180, 120, 255));
+    c.txt(pl, c.w / 2, c.h / 2 - 2, 2, packRGBA(180, 120, 255));
     char bw[48]; std::snprintf(bw, sizeof(bw), "Best Level: %d", std::max(world.bestLevel, world.level));
-    c.txt(bw, c.w / 2, c.h / 2 + 42, 2, kDimWhite);
+    c.txt(bw, c.w / 2, c.h / 2 + 24, 2, kDimWhite);
     int mins = static_cast<int>(world.elapsedRunSeconds) / 60, secs = static_cast<int>(world.elapsedRunSeconds) % 60;
     char tb[48]; std::snprintf(tb, sizeof(tb), "Time: %d:%02d   [%s]", mins, secs, getDifficultySettings(world.difficulty).name);
-    c.txt(tb, c.w / 2, c.h / 2 + 46, 2, kDimWhite);
-    c.fill(c.w / 2 - 180, c.h / 2 + 68, 360, 2, packRGBA(120, 40, 40));
-    c.txt("[ENTER] Play Again", c.w / 2, c.h / 2 + 95, 3, kCyan);
-    c.txt("[ESC] Quit", c.w / 2, c.h / 2 + 125, 2, kDimWhite);
+    c.txt(tb, c.w / 2, c.h / 2 + 50, 2, kDimWhite);
+    c.fill(c.w / 2 - 200, c.h / 2 + 78, 400, 2, packRGBA(120, 40, 40));
+    c.txt("[ENTER] Retry", c.w / 2, c.h / 2 + 103, 3, kCyan);
+    c.txt("[D] Difficulty   [L] Leaderboard", c.w / 2, c.h / 2 + 132, 2, kOffWhite);
+    c.txt("[ESC] Main Menu", c.w / 2, c.h / 2 + 154, 2, kDimWhite);
 }
 
 void renderSettings(const Canvas& c, const World& world) {
     c.gradient(packRGBA(10, 14, 30), packRGBA(28, 34, 65));
-    c.outlinedRect(c.w / 2 - 360, c.h / 2 - 210, 720, 420, kPanelBg, kPanelEdge, 2);
+    c.outlinedRect(c.w / 2 - 390, c.h / 2 - 220, 780, 440, kPanelBg, kPanelEdge, 2);
     c.txt("SETTINGS", c.w / 2, c.h / 2 - 180, 4, kGold);
 
     int category = clampInt(world.settingsCategory, 0, static_cast<int>(SettingsCategory::COUNT) - 1);
@@ -325,30 +351,28 @@ void renderSettings(const Canvas& c, const World& world) {
         c.txt(categoryName(i), tabX + i * tabW + (tabW - 6) / 2, categoryY + 16, 2, active ? kWhite : kDimWhite);
     }
 
-    c.fill(c.w / 2 - 300, c.h / 2 - 92, 600, 2, kPanelEdge);
+    c.fill(c.w / 2 - 330, c.h / 2 - 92, 660, 2, kPanelEdge);
     int rows = settingsRowCount(category);
     int cursor = clampInt(world.settingsCursor, 0, rows - 1);
     int rowTop = c.h / 2 - 70;
+    int rowX = c.w / 2 - 310;
+    int rowW = 620;
     for (int i = 0; i < rows; ++i) {
         int y = rowTop + i * 48;
         bool selected = i == cursor;
-        c.outlinedRect(c.w / 2 - 280, y, 560, 38,
+        c.outlinedRect(rowX, y, rowW, 38,
                        selected ? packRGBA(38, 58, 95) : packRGBA(24, 28, 42),
                        selected ? kCyan : packRGBA(50, 60, 85), 1);
         char label[48], value[48];
         settingsRowText(world, category, i, label, sizeof(label), value, sizeof(value));
-        c.txtL(label, c.w / 2 - 260, y + 11, 2, selected ? kWhite : kOffWhite);
-        int valueW = BitmapFont::textPixelWidth(value, 2);
-        c.txtL(value, c.w / 2 + 250 - valueW, y + 11, 2, selected ? kGold : kDimWhite);
-        if (selected) {
-            c.txtL("<", c.w / 2 + 176, y + 11, 2, kCyan);
-            c.txtL(">", c.w / 2 + 268, y + 11, 2, kCyan);
-        }
+        c.txtFitL(label, rowX + 24, y + 11, 2, 300, selected ? kWhite : kOffWhite);
+        c.txtR(value, rowX + rowW - 48, y + 11, 2, selected ? kGold : kDimWhite);
+        if (selected) c.txtL(">", rowX + rowW - 25, y + 11, 2, kCyan);
     }
 
-    c.fill(c.w / 2 - 300, c.h / 2 + 145, 600, 2, kPanelEdge);
-    c.txt("TAB category   W/S select   A/D adjust   ENTER toggle", c.w / 2, c.h / 2 + 168, 2, kDimWhite);
-    c.txt("[ESC] Back", c.w / 2, c.h / 2 + 192, 2, kDimWhite);
+    c.fill(c.w / 2 - 330, c.h / 2 + 145, 660, 2, kPanelEdge);
+    c.txt("TAB category   W/S select   A/D adjust", c.w / 2, c.h / 2 + 168, 2, kDimWhite);
+    c.txt("ENTER toggle   [ESC] Back", c.w / 2, c.h / 2 + 192, 2, kDimWhite);
 }
 
 void renderShop(const Canvas& c, const World& world) {
@@ -393,7 +417,7 @@ void renderShop(const Canvas& c, const World& world) {
 
     if (numItems == 0) c.txt("Shop is empty!", c.w / 2, c.h / 2, 2, kDimWhite);
 
-    c.txt("[N/ESC] Next Level", c.w / 2, c.h / 2 + 160, 2, kCyan);
+    c.txt("[N/ESC] Next Level   [Q] Main Menu", c.w / 2, c.h / 2 + 160, 2, kCyan);
 }
 
 void renderRaycasterScene(const Canvas& c, const World& world) {
@@ -889,7 +913,7 @@ void renderPauseOverlay(const Canvas& c, const World& world) {
     c.txt("PAUSED", c.w / 2, c.h / 2 - 50, 5, kWhite);
     c.fill(c.w / 2 - 120, c.h / 2 - 15, 240, 2, kPanelEdge);
     c.txt("[ESC] Resume", c.w / 2, c.h / 2 + 10, 2, kOffWhite);
-    c.txt("[ESC] again to Quit", c.w / 2, c.h / 2 + 35, 2, kDimWhite);
+    c.txt("[Q] Main Menu", c.w / 2, c.h / 2 + 35, 2, kDimWhite);
     char pauseScore[48];
     std::snprintf(pauseScore, sizeof(pauseScore), "Score: %d   Level: %d", world.score, world.level);
     c.txt(pauseScore, c.w / 2, c.h / 2 + 65, 2, kGold);
@@ -928,6 +952,7 @@ void renderUpgradeOverlay(const Canvas& c, const World& world) {
         char hintBuf[24]; std::snprintf(hintBuf, sizeof(hintBuf), "Press [%d]", i + 1);
         c.txt(hintBuf, cx + cardW2 / 2, cy + cardH2 - 18, 2, kCyan);
     }
+    c.txt("[N/ESC] Skip   [Q] Main Menu", c.w / 2, c.h / 2 + 135, 2, kDimWhite);
 }
 
 void renderTitleBar(const Canvas& c, const World& world, SDL_Window* window) {
@@ -939,7 +964,7 @@ void renderTitleBar(const Canvas& c, const World& world, SDL_Window* window) {
 
     c.txtL("IRON MAZE", 12, cy - 5, 2, kGold);
 
-    int btnW = 46;
+    int btnW = 52;
     int closeX = w - btnW;
     int maxX   = closeX - btnW;
     int minX   = maxX - btnW;
@@ -978,6 +1003,18 @@ void renderTitleBar(const Canvas& c, const World& world, SDL_Window* window) {
 
     c.fill(closeX, 0, btnW, h - 1, packRGBA(160, 40, 40));
     c.txt("X", closeX + btnW / 2, cy, 2, kWhite);
+}
+
+SDL_Rect contentDestinationRect(const World& world, bool is3D, int sourceW, int sourceH) {
+    const int contentH = std::max(1, world.height - kTitleBarHeight);
+    if (is3D) return SDL_Rect {0, kTitleBarHeight, world.width, contentH};
+
+    const float sx = static_cast<float>(world.width) / static_cast<float>(std::max(1, sourceW));
+    const float sy = static_cast<float>(contentH) / static_cast<float>(std::max(1, sourceH));
+    const float scale = std::max(0.01F, std::min(sx, sy));
+    const int dstW = std::max(1, static_cast<int>(std::round(static_cast<float>(sourceW) * scale)));
+    const int dstH = std::max(1, static_cast<int>(std::round(static_cast<float>(sourceH) * scale)));
+    return SDL_Rect {(world.width - dstW) / 2, kTitleBarHeight + (contentH - dstH) / 2, dstW, dstH};
 }
 
 }  // namespace
@@ -1056,8 +1093,12 @@ void render(const World& world, GameStateId state, SDL_Renderer* renderer, SDL_W
 
     SDL_UnlockTexture(gFramebuffer);
 
-    // Render scene below the title bar
-    SDL_Rect dstRect {0, kTitleBarHeight, world.width, world.height - kTitleBarHeight};
+    SDL_SetRenderDrawColor(renderer, 10, 14, 30, 255);
+    SDL_RenderClear(renderer);
+
+    // Render scene below the title bar. Menu screens keep their logical 16:9
+    // aspect ratio so pixel-font UI is not stretched on wide or short windows.
+    SDL_Rect dstRect = contentDestinationRect(world, is3D, rw, rh);
     SDL_RenderCopy(renderer, gFramebuffer, nullptr, &dstRect);
 
     // Render title bar at native resolution using a separate texture

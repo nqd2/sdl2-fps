@@ -46,11 +46,16 @@ enable_testing()
 
 add_executable(gameplay_tests
     tests/test_progression.cpp
+    src/core/StateMachine.cpp
     src/data/GameData.cpp
+    src/systems/AudioSystem.cpp
+    src/systems/CombatSystem.cpp
+    src/systems/InputSystem.cpp
     src/systems/MathUtils.cpp
     src/systems/Map.cpp
     src/systems/MazeGen.cpp
     src/systems/ParticleSystem.cpp
+    src/systems/RenderUtils.cpp
     src/systems/SaveSystem.cpp
 )
 target_include_directories(gameplay_tests PRIVATE src)

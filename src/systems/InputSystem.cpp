@@ -48,7 +48,7 @@ int rowsForCategory(int category) {
 
 TitleBarButton hitTestTitleButton(const World& world, int mx, int my) {
     if (my >= kTitleBarHeight) return TitleBarButton::None;
-    int btnW = 46;
+    int btnW = 52;
     int closeX = world.width - btnW;
     int maxX   = closeX - btnW;
     int minX   = maxX - btnW;
@@ -149,6 +149,19 @@ bool adjustSetting(World& world, SDL_Window* window, int delta, bool activate) {
     return changed;
 }
 
+void advanceToNextLevel(World& world, StateMachine& states) {
+    world.level += 1;
+    world.wave = world.level;
+    CombatSystem::spawnLevel(world);
+    setMouseCapture(world, true);
+    states.clearAndSet(GameStateId::Playing);
+}
+
+void returnToMainMenu(World& world, StateMachine& states) {
+    setMouseCapture(world, false);
+    states.clearAndSet(GameStateId::MainMenu);
+}
+
 }  // namespace
 
 void handleInput(World& world, StateMachine& states, const SDL_Event& event, SDL_Window* window) {
@@ -198,19 +211,21 @@ void handleInput(World& world, StateMachine& states, const SDL_Event& event, SDL
     if (event.type == SDL_KEYDOWN) {
         SDL_Keycode k = event.key.keysym.sym;
         if (k == SDLK_ESCAPE) {
-            if (state == GameStateId::Playing) { setMouseCapture(world, false); states.push(GameStateId::Paused); }
-            else if (state == GameStateId::Paused) { setMouseCapture(world, true); states.pop(); }
-            else if (state == GameStateId::DifficultySelect) { states.clearAndSet(GameStateId::MainMenu); }
-            else if (state == GameStateId::Leaderboard) { states.clearAndSet(GameStateId::MainMenu); }
-            else if (state == GameStateId::Settings) { states.clearAndSet(GameStateId::MainMenu); }
-            else if (state == GameStateId::Shop) {
-                world.level += 1;
-                world.wave = world.level;
-                CombatSystem::spawnLevel(world);
+            if (state == GameStateId::Playing) {
+                setMouseCapture(world, false);
+                states.push(GameStateId::Paused);
+            } else if (state == GameStateId::Paused) {
                 setMouseCapture(world, true);
-                states.clearAndSet(GameStateId::Playing);
+                states.pop();
+            } else if (state == GameStateId::DifficultySelect || state == GameStateId::Leaderboard ||
+                       state == GameStateId::Settings || state == GameStateId::GameOver) {
+                returnToMainMenu(world, states);
+            } else if (state == GameStateId::Shop || state == GameStateId::UpgradeSelection) {
+                advanceToNextLevel(world, states);
+            } else if (state == GameStateId::MainMenu) {
+                world.quitRequested = true;
             }
-            else if (state == GameStateId::MainMenu || state == GameStateId::GameOver) { world.quitRequested = true; }
+            return;
         }
 
         if (state == GameStateId::MainMenu) {
@@ -222,17 +237,21 @@ void handleInput(World& world, StateMachine& states, const SDL_Event& event, SDL
             else if (k == SDLK_2) { world.difficulty = Difficulty::Normal; CombatSystem::resetRun(world); setMouseCapture(world, true); states.clearAndSet(GameStateId::Playing); }
             else if (k == SDLK_3) { world.difficulty = Difficulty::Hard; CombatSystem::resetRun(world); setMouseCapture(world, true); states.clearAndSet(GameStateId::Playing); }
         } else if (state == GameStateId::GameOver) {
-            if (k == SDLK_RETURN) { states.clearAndSet(GameStateId::DifficultySelect); }
+            if (k == SDLK_RETURN) {
+                CombatSystem::resetRun(world);
+                setMouseCapture(world, true);
+                states.clearAndSet(GameStateId::Playing);
+            } else if (k == SDLK_d) {
+                states.clearAndSet(GameStateId::DifficultySelect);
+            } else if (k == SDLK_l) {
+                states.clearAndSet(GameStateId::Leaderboard);
+            }
         } else if (state == GameStateId::Shop) {
             int itemCount = static_cast<int>(world.shopItems.size());
-            if (itemCount <= 0) {
-                if (k == SDLK_n || k == SDLK_ESCAPE || k == SDLK_RETURN || k == SDLK_SPACE) {
-                    world.level += 1;
-                    world.wave = world.level;
-                    CombatSystem::spawnLevel(world);
-                    setMouseCapture(world, true);
-                    states.clearAndSet(GameStateId::Playing);
-                }
+            if (k == SDLK_q) {
+                returnToMainMenu(world, states);
+            } else if (itemCount <= 0) {
+                if (k == SDLK_n || k == SDLK_RETURN || k == SDLK_SPACE) advanceToNextLevel(world, states);
             } else if (k == SDLK_UP || k == SDLK_w) {
                 world.shopCursor = (world.shopCursor - 1 + itemCount) % itemCount;
             } else if (k == SDLK_DOWN || k == SDLK_s) {
@@ -261,12 +280,8 @@ void handleInput(World& world, StateMachine& states, const SDL_Event& event, SDL
                             world.shopCursor = std::max(0, static_cast<int>(world.shopItems.size()) - 1);
                     }
                 }
-            } else if (k == SDLK_n || k == SDLK_ESCAPE) {
-                world.level += 1;
-                world.wave = world.level;
-                CombatSystem::spawnLevel(world);
-                setMouseCapture(world, true);
-                states.clearAndSet(GameStateId::Playing);
+            } else if (k == SDLK_n) {
+                advanceToNextLevel(world, states);
             }
         } else if (state == GameStateId::Settings) {
             world.settingsCategory = clampInt(world.settingsCategory, 0, categoryCount() - 1);
@@ -291,16 +306,16 @@ void handleInput(World& world, StateMachine& states, const SDL_Event& event, SDL
             auto pick = [&](int idx) {
                 if (idx >= 0 && idx < static_cast<int>(world.pendingUpgrades.size())) {
                     CombatSystem::applyUpgrade(world, world.pendingUpgrades[idx]);
-                    world.level += 1;
-                    world.wave = world.level;
-                    CombatSystem::spawnLevel(world);
-                    setMouseCapture(world, true);
-                    states.clearAndSet(GameStateId::Playing);
+                    advanceToNextLevel(world, states);
                 }
             };
             if (k == SDLK_1) pick(0);
             else if (k == SDLK_2) pick(1);
             else if (k == SDLK_3) pick(2);
+            else if (k == SDLK_n) advanceToNextLevel(world, states);
+            else if (k == SDLK_q) returnToMainMenu(world, states);
+        } else if (state == GameStateId::Paused) {
+            if (k == SDLK_q) returnToMainMenu(world, states);
         } else if (state == GameStateId::Playing) {
             if (k == SDLK_1) world.player.currentWeapon = WeaponType::Pistol;
             else if (k == SDLK_2 && world.player.unlockedWeapons >= 2) world.player.currentWeapon = WeaponType::Shotgun;
