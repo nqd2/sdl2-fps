@@ -1,4 +1,4 @@
-name: Build
+name: Build and release
 
 on:
   push:
@@ -7,6 +7,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   linux:
@@ -102,3 +106,38 @@ jobs:
         with:
           name: iron-maze-windows-x64
           path: dist/iron-maze-windows-x64
+
+  release:
+    needs: [linux, windows]
+    if: github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: iron-maze-linux-x86_64
+          path: pkg/linux
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: iron-maze-windows-x64
+          path: pkg/windows
+
+      - name: Zip packages
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          (cd pkg/linux && zip -r "$GITHUB_WORKSPACE/iron-maze-${VERSION}-linux-x86_64.zip" .)
+          (cd pkg/windows && zip -r "$GITHUB_WORKSPACE/iron-maze-${VERSION}-windows-x64.zip" .)
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Iron Maze ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            iron-maze-${{ github.ref_name }}-linux-x86_64.zip
+            iron-maze-${{ github.ref_name }}-windows-x64.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
